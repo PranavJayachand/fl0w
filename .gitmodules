@@ -1,0 +1,6 @@
+[submodule "Shared"]
+    path = Shared
+    url = git://github.com/PhilipTrauner/fl0w-Shared.git
+[submodule "Sublime/fl0w/Shared"]
+    path = Sublime/fl0w/Shared
+    url = git://github.com/PhilipTrauner/fl0w-Shared.git
