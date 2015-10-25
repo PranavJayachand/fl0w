@@ -1,4 +1,6 @@
 .DS_Store
 *.pyc
 __pycache__
+debug_link.py
+debug_sublime.py
 
