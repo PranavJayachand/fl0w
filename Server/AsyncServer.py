@@ -6,12 +6,11 @@ import _thread
 
 
 class Server:
-	def __init__(self, host, port, handler, handler_args=[]):
+	def __init__(self, host_port_pair, handler, handler_args=[]):
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		self.sock.bind((host, port))
+		self.sock.bind(host_port_pair)
 		self.sock.listen(2)
 		self.handler = handler
-		self.broadcast = Server.Broadcast()
 		while 1:
 			sock, info = self.sock.accept()
 			_thread.start_new_thread(self.controller, (sock, info, handler_args))
@@ -19,14 +18,11 @@ class Server:
 
 	def controller(self, sock, info, handler_args):
 		sock = ESock(sock)
-		handler = self.handler(sock, info, self.broadcast, **handler_args)
-		self.broadcast.add(sock)
+		handler = self.handler(sock, info, **handler_args)
 		while 1:
 			try:
-				data, type = handler.sock.recv()
-				handler.handle(data, type)
+				handler.handle(sock.recv())
 			except (socket.error, OSError):
-				self.broadcast.remove(handler.sock)
 				handler.finish()
 				handler.sock.close()
 				_thread.exit()
@@ -48,21 +44,3 @@ class Server:
 
 		def finish(self):
 			pass
-
-
-	class Broadcast:
-		def __init__(self):
-			self.socks = []
-
-		def broadcast(self, data, exclude=[]):
-			for sock in self.socks:
-				if not sock in exclude:
-					sock.send(data)
-
-		def remove(self, sock):
-			if sock in self.socks:
-				del self.socks[self.socks.index(sock)]
-
-		def add(self, sock):
-			if not sock in self.socks:
-				self.socks.append(sock)
