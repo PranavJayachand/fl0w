@@ -38,7 +38,7 @@ class ESock:
 			data = data.decode()
 		elif data_type == DataTypes.json:
 			data = json.loads(data.decode())
-		return data, data_type
+		return data
 
 	def send(self, data):
 		data_type = type(data)
