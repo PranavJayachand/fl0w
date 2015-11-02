@@ -1,40 +1,79 @@
 from sys import path
 import os
-path.append(os.path.dirname(os.path.realpath(__file__)))
+fl0w_path = os.path.dirname(os.path.realpath(__file__))
+shared_path = os.path.dirname(os.path.realpath(__file__)) + "/Shared/"
+if fl0w_path not in path:
+	path.append(fl0w_path)
+if shared_path not in path:
+	path.append(shared_path)
+
+
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
 import sublime 
 import sublime_plugin
-import random
+
+import socket
+from ESock import ESock
 from SublimeMenu import *
 
+def plugin_unloaded():
+	observer.stop()
+	print("Observer stopped!")
+
+
+class ReloadHandler(FileSystemEventHandler):
+		def on_modified(self, event):
+			print("Modified: %s" % event)
+
+		def on_created(self, event):
+			print("Created: %s" % event)
+
+		def on_deleted(self, event):
+			print("Deleted: %s" % event)
 
 class Fl0w:
 	def __init__(self):
 		self.window = None
 		self.main_menu = Items()
 		self.link_menu = Items()
-		self.link_menu.add_item(Item("Compile", action=self.info))
-		self.main_menu.add_item(Item("Connect", "Connect to a fl0w server", action=self.connect))
-		self.main_menu.add_item(Item("Set Link", items=self.link_menu))
+		#self.link_menu.add_item(Item("Compile", action=self.info))
+		self.main_menu.add_item(Item("Connect", "Connect to a fl0w server", action=self.invoke_connect))
+		#self.main_menu.add_item(Item("Set Link", items=self.link_menu))
 		
 
-	def info(self):
-		sublime.message_dialog("No")
+	# Input invokers
+	def invoke_connect(self):
+		Input("Address Port", on_done=self.connect).invoke(self.window)
 
-	def connect(self):
-		Input("IP:Port", on_done=self.set_ip).invoke(self.window)
-		Input("User:", on_done=self.set_ip).invoke(self.window)
-		Input("Password:", on_done=self.set_ip).invoke(self.window)
+	def invoke_auth(self):
+		Input("Username Password", on_done=self.auth).invoke(self.window)
 
-	def set_ip(self, ip_pair):
-		print(ip_pair)
 
-	def authed(self):
 		
+
+	def connect(self, connect_pair):
+		connect_pair = connect_pair.split(" ")
+		if len(connect_pair) == 2:
+			try:
+				self.sock = ESock(socket.create_connection(connect_pair))
+				self.main_menu.add_item(Item("Auth", "Authenticate", action=self.invoke_auth))
+			except Exception as e:
+				sublime.error_message("Error during connection creation:\n %s" % str(e))
+		else:
+			sublime.error_message("Input does not consist of IP and port")
+
+	def auth(self, auth_pair):
+		auth_pair = auth_pair.split(" ")
+		if len(auth_pair) == 2:
+			pass
+		"""
 		self.main_menu.add_item(Item("Compile", action=self.info))
 		self.main_menu.add_item(Item("Resync", action=self.info))
 		self.main_menu.add_item(Item("Disconnect", action=self.info))
 		self.main_menu.add_item(Item("Backup", action=self.info))
+		"""
 
 
 class Fl0wCommand(sublime_plugin.WindowCommand):
@@ -43,25 +82,9 @@ class Fl0wCommand(sublime_plugin.WindowCommand):
 			fl0w.window = self.window
 		fl0w.main_menu.invoke(self.window)
 
-"""
-def test():
-	print("Testing :3")
 
-def test_input(user_input):
-	print(user_input)
-
-
-item_handler = Items()
-sub_item_handler = Items()
-
-sub0_test = Item("Test", description="test", action=lol, items=sub_item_handler)
-sub0_test1 = Item("Test1", action=test)
-sub1_test1 = Item("Test1", action=test, input=Input("Test:", initial_text="Test", on_done=test_input))
-
-
-sub_item_handler.add_item(sub1_test1)
-item_handler.add_item(sub0_test)
-item_handler.add_item(sub0_test1)
-"""
 
 fl0w = Fl0w()
+observer = Observer()
+observer.schedule(ReloadHandler(), path=".", recursive=True)
+#observer.start()
