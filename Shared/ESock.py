@@ -13,6 +13,8 @@ class ESock:
 			return self.recv
 		elif attr == "send":
 			return self.send
+		elif attr == "_ESock__dict":
+			return self.__eq__
 		return getattr(self._sock, attr)
 
 
