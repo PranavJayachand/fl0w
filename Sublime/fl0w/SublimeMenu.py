@@ -37,7 +37,6 @@ class Items:
 		self.window = window
 		if back:
 			items = [["Back", "Back to previous menu"]] + self.item_names[:]
-			print(items)
 			self.back = back
 		else:
 			items = self.item_names
