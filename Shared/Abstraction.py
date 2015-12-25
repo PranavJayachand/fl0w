@@ -5,8 +5,3 @@ class fl0wAPI:
 	def __init__(self, address, client_type):
 		self.sock = socket.create_connection(address)
 
-		self.authed = True
-
-	def auth(self, user, password):
-		self.sock.send({"auth" : {"user" : user, "pw" : password}})
-		if self.sock.recv()
