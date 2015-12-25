@@ -29,17 +29,16 @@ class Server:
 
 
 	class Handler:
-		def __init__(self, sock, info, broadcast, **kwargs):
+		def __init__(self, sock, info, **kwargs):
 			self.sock = sock
 			self.info = info
-			self.broadcast = broadcast
 			self.kwargs = kwargs
 			self.setup()
 
 		def setup(self):
 			pass
 
-		def handle(self, data, type):
+		def handle(self, data):
 			pass
 
 		def finish(self):
