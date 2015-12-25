@@ -18,6 +18,8 @@ import socket
 from ESock import ESock
 from SublimeMenu import *
 
+import webbrowser
+
 def plugin_unloaded():
 	observer.stop()
 	print("Observer stopped!")
@@ -35,52 +37,60 @@ class ReloadHandler(FileSystemEventHandler):
 
 class Fl0w:
 	def __init__(self):
+		self.connected = False
+
 		self.window = None
+		self.start_menu = Items()
+		self.start_menu.add_item(Item("Connect", "Connect to a fl0w server", action=self.invoke_connect))
+		self.start_menu.add_item(Item("About", "Information about fl0w", action=self.invoke_about))
 		self.main_menu = Items()
-		self.link_menu = Items()
-		#self.link_menu.add_item(Item("Compile", action=self.info))
-		self.main_menu.add_item(Item("Connect", "Connect to a fl0w server", action=self.invoke_connect))
-		#self.main_menu.add_item(Item("Set Link", items=self.link_menu))
+		self.main_menu.add_item(Item("Info", "Server info", action=self.invoke_info))
+		self.main_menu.add_item(Item("Disconnect", "Disconnect from server", action=self.invoke_disconnect))
+
 		
 
 	# Input invokers
 	def invoke_connect(self):
-		Input("Address Port", on_done=self.connect).invoke(self.window)
+		Input("Address:Port", initial_text="", on_done=self.connect).invoke(self.window)
 
-	def invoke_auth(self):
-		Input("Username Password", on_done=self.auth).invoke(self.window)
+	def invoke_about(self):
+		if sublime.ok_cancel_dialog("fl0w by @robot0nfire", "robot0nfire.com"):	
+			webbrowser.open("http://robot0nfire.com")
+
+	def invoke_info(self):
+		self.sock.send({"info" : ""})
+		sublime.message_dialog(self.sock.recv())
+		self.sock.send("")
+		sublime.message_dialog(self.sock.recv())
+
+	def invoke_disconnect(self):
+		self.sock.close()
+		self.connected = False
+		sublime.message_dialog("Connection closed")
 
 
-		
-
-	def connect(self, connect_pair):
-		connect_pair = connect_pair.split(" ")
-		if len(connect_pair) == 2:
+	def connect(self, connect_details):
+		connect_details = connect_details.split(":")
+		if len(connect_details) == 2:
 			try:
-				self.sock = ESock(socket.create_connection(connect_pair))
-				self.main_menu.add_item(Item("Auth", "Authenticate", action=self.invoke_auth))
+				self.sock = ESock(socket.create_connection((connect_details[0], int(connect_details[1]))))
+				sublime.status_message("Connected to %s:%s." % (connect_details[0], connect_details[1]))
+				self.connected = True
 			except Exception as e:
 				sublime.error_message("Error during connection creation:\n %s" % str(e))
 		else:
-			sublime.error_message("Input does not consist of IP and port")
+			sublime.error_message("Invalid input.")
 
-	def auth(self, auth_pair):
-		auth_pair = auth_pair.split(" ")
-		if len(auth_pair) == 2:
-			pass
-		"""
-		self.main_menu.add_item(Item("Compile", action=self.info))
-		self.main_menu.add_item(Item("Resync", action=self.info))
-		self.main_menu.add_item(Item("Disconnect", action=self.info))
-		self.main_menu.add_item(Item("Backup", action=self.info))
-		"""
 
 
 class Fl0wCommand(sublime_plugin.WindowCommand):
 	def run(self, menu=None, action=None): 
 		if fl0w.window == None:
 			fl0w.window = self.window
-		fl0w.main_menu.invoke(self.window)
+		if not fl0w.connected:
+			fl0w.start_menu.invoke(self.window)
+		else:
+			fl0w.main_menu.invoke(self.window)
 
 
 
