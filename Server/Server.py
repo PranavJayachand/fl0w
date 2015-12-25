@@ -5,74 +5,55 @@ from .AsyncServer import Server
 from .Broadcast import Broadcast
 
 class Command:
-	def __init__(self, prefix, auth_required=True):
-		self.prefix = prefix
-		self.auth_required = auth_required
+	def __init__(self):
+		self.setup()
 
-	def run(self, handler):
+	def setup(self):
 		pass
 
-	def __eq__(self, other):
-		return self.prefix == other.prefix
+	def run(self, data, handler):
+		pass
 
 
 class Info(Command):
-	def __init__(self):
-		super().__init__("info", auth_required=False)
-
-	def run(self, handler):
-		return ["Link Clients connected: %d | Sublime Clients connected: %d" % 
-			(len(handler.link_broadcast), len(handler.sublime_broadcast)]
+	def run(self, data, handler):
+		handler.sock.send("Currently connected: %d" % len(handler.broadcast.socks))
 
 
 
-class fl0wHandler(Server.Handler):
+
+
+class SublimeHandler(Server.Handler):
 	def setup(self):
 		Logging.info("Handler for '%s' initalised." % self.info[0])
-		self.users = self.kwargs.pop("users")
 		self.commands = self.kwargs.pop("commands")
-		self.sublime_broadcast = self.kwargs.pop("sublime_broadcast")
-		self.link_broadcast = self.kwargs.pop("link_broadcast")
-		self.client_type = None
-		self.authed = False
+		self.broadcast = self.kwargs.pop("broadcast")
+		self.broadcast.add(self.sock)
+		self.current_prefix = None
+
 		
 
-	def handle(self, data, type):
-		if self.client_type == None:
-			temp = self.sock.recv()
-			if 
+	def handle(self, data):
+		if type(data) == dict:
+			data_keys = list(data.keys())
+			if len(data_keys) == 1:
+				if data_keys[0] in self.commands:
+					self.current_prefix = data_keys[0]
+					self.commands[self.current_prefix].run(data[data_keys[0]], self)
+			else:
+				if self.current_prefix != None:
+					self.commands[self.current_prefix].run(data, self)				
+		else:
+			if self.current_prefix != None:
+				self.commands[self.current_prefix].run(data, self)
 
 
 	def finish(self):
+		self.broadcast.remove(self.sock)
 		Logging.info("%s disconnected." % self.info[0])
 
 
-	def auth(self, collection):
-		if "auth" in collection:
-			if "user" and "pw" in collection["auth"]:
-				temp_user = User(collection["auth"]["user"], collection["auth"]["pw"])
-				if temp_user in self.users:
-					self.sock.send({"auth" : 1})
-					self.authed = True
-					return
-		self.sock.send({"auth" : 0})
-		self.sock.close()
 
 
-class User:
-	def __init__(self, username, password):
-		self.username = username
-		self.password = password
-
-	def __eq__(self, other):
-		if self.username == other.username and self.password == other.password:
-			return True
-		return False
-
-	def __repr__(self):
-		return self.username
-
-
-server = Server(("127.0.0.1", 3077), fl0wHandler, 
-	{"users" : [User("test", "123")], "commands" : [Info()], 
-	"sublime_broadcast" : Broadcast(), "link_broadcast" : Broadcast()})
+server = Server(("127.0.0.1", 3077), SublimeHandler, 
+	{"commands" : {"info" : Info()}, "broadcast" : Broadcast()})
