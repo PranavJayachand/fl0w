@@ -1,7 +1,6 @@
 import json
 import socket
 import struct
-import time
 import DataTypes
 
 class ESock:
