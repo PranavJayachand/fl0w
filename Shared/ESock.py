@@ -18,13 +18,14 @@ class ESock:
 
 
 	def recv(self):
-		raw_metadata = self._sock.recv(8)
+		raw_metadata = self._sock.recv(24)
 		if raw_metadata == b"":
 			self._sock.close()
 			raise socket.error("Connection closed")
-		metadata = struct.unpack("cI", raw_metadata)
+		metadata = struct.unpack("cI16s", raw_metadata)
 		data_type = metadata[0]
 		data_length = metadata[1]
+		route = metadata[2].rstrip(b"\x00").decode()
 		data = b''
 		bufsize = 4096
 		while len(data) < data_length:
@@ -39,20 +40,21 @@ class ESock:
 			data = data.decode()
 		elif data_type == DataTypes.json:
 			data = json.loads(data.decode())
-		return data
+		return data, route
 
-	def send(self, data):
+	def send(self, data, route=""):
 		data_type = type(data)
+		route = route.encode()
 		if data_type is str:
 			data = data.encode()
-			self.sendall(struct.pack("cI", DataTypes.str, len(data)) + data)
+			self.sendall(struct.pack("cI16s", DataTypes.str, len(data), route) + data)
 		elif data_type is dict or data_type is list:
 			data = json.dumps(data).encode()
-			self.sendall(struct.pack("cI", DataTypes.json, len(data)) + data)
+			self.sendall(struct.pack("cI16s", DataTypes.json, len(data), route) + data)
 		elif data_type is bytes:
-			self.sendall(struct.pack("cI", DataTypes.bin, len(data)) + data)
+			self.sendall(struct.pack("cI16s", DataTypes.bin, len(data), route) + data)
 		else:
-			self.sendall(struct.pack("cI", DataTypes.other, len(data)) + data)
+			self.sendall(struct.pack("cI16s", DataTypes.other, len(data), route) + data)
 
 
 	def __eq__(self, other):
