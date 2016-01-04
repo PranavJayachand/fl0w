@@ -1,59 +1,42 @@
 import Logging
-import DataTypes
+import Routing
 
 from .AsyncServer import Server
 from .Broadcast import Broadcast
 
-class Command:
-	def __init__(self):
-		self.setup()
-
-	def setup(self):
-		pass
+class Info(Routing.Route):
+	def setup(self, **kwargs):
+		self.message = kwargs.pop("message")
+		self.counter = 0
 
 	def run(self, data, handler):
-		pass
-
-
-class Info(Command):
-	def run(self, data, handler):
-		handler.sock.send("Currently connected: %d" % len(handler.broadcast.socks))
-
-
-
+		self.counter += 1
+		handler.sock.send("Currently connected: %d (Command has been called %d times.) (%s)" % 
+			(len(handler.broadcast.socks), self.counter, self.message), "info")
 
 
 class SublimeHandler(Server.Handler):
 	def setup(self):
-		Logging.info("Handler for '%s' initalised." % self.info[0])
-		self.commands = self.kwargs.pop("commands")
+		Logging.info("Handler for '%s:%d' initalised." % (self.info[0], self.info[1]))
+		self.routes = Routing.create_routes(self.kwargs.pop("routes"))
 		self.broadcast = self.kwargs.pop("broadcast")
 		self.broadcast.add(self.sock)
-		self.current_prefix = None
 
 		
-
-	def handle(self, data):
-		if type(data) == dict:
-			data_keys = list(data.keys())
-			if len(data_keys) == 1:
-				if data_keys[0] in self.commands:
-					self.current_prefix = data_keys[0]
-					self.commands[self.current_prefix].run(data[data_keys[0]], self)
-			else:
-				if self.current_prefix != None:
-					self.commands[self.current_prefix].run(data, self)				
-		else:
-			if self.current_prefix != None:
-				self.commands[self.current_prefix].run(data, self)
+	def handle(self, data, route):
+		if route in self.routes:
+			self.routes[route].run(data, self)
 
 
 	def finish(self):
 		self.broadcast.remove(self.sock)
-		Logging.info("%s disconnected." % self.info[0])
+		Logging.info("'%s:%d' disconnected." % (self.info[0], self.info[1]))
 
 
-
-
-server = Server(("127.0.0.1", 3077), SublimeHandler, 
-	{"commands" : {"info" : Info()}, "broadcast" : Broadcast()})
+server = Server(("127.0.0.1", 3077))
+try:
+	Logging.header("fl0w server started.")
+	server.run(SublimeHandler, {"routes" : {"info" : (Info, {"message" : "Test"})}, "broadcast" : Broadcast()})
+except KeyboardInterrupt:
+	server.stop()
+	Logging.warning("Gracefully shutting down server.")
