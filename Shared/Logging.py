@@ -1,59 +1,101 @@
-import time
-import inspect
+from __future__ import print_function
+from time import strftime
+from inspect import getmodule
+from inspect import stack
+from sys import stderr
+from sys import stdout
 
-"""
-HEADER = '\033[95m' Magenta
-OKBLUE = '\033[94m' Blue
-OKGREEN = '\033[92m' Green
-WARNING = '\033[93m' Yellow
-FAIL = '\033[91m' Red
-ENDC = '\033[0m'
-BOLD = '\033[1m'
-"""
+# Formatting
+BOLD = "\033[1m"
+HIDDEN = "\033[2m"
+UNDERLINE = "\033[4m"
+BLINK = "\033[5m"
+INVERTED = "\033[7m"
+HIDDEN = "\033[8m"
+
+# Backgrounds
+BACKGROUND_DEFAULT = "\033[49m"
+BACKGROUND_BLACK = "\033[40m"
+BACKGROUND_RED = "\033[41m"
+BACKGROUND_GREEN = "\033[42m"
+BACKGROUND_YELLOW = "\033[43m"
+BACKGROUND_BLUE = "\033[44m"
+BACKGROUND_MAGENTA = "\033[45m"
+BACKGROUND_CYAN = "\033[46m"
+BACKGROUND_LIGHT_GRAY = "\033[47m"
+BACKGROUND_DARK_GRAY = "\033[100m"
+BACKGROUND_LIGHT_RED = "\033[101m"
+BACKGROUND_LIGHT_GREEN = "\033[102m"
+BACKGROUND_LIGHT_YELLOW = "\033[103m"
+BACKGROUND_LIGHT_BLUE = "\033[104m"
+BACKGROUND_LIGHT_MAGENTA = "\033[105m"
+BACKGROUND_LIGHT_CYAN = "\033[106m"
+BACKGROUND_WHITE = "\033[107m"
+
+# Colors
+DEFAULT = "\033[39m" 
+BLACK = "\033[30m"
+RED = "\033[31m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+BLUE = "\033[34m"
+MAGENTA = "\033[35m"
+CYAN = "\033[36m"
+LIGHT_GREY = "\033[37m"
+DARK_GRAY = "\033[90m"
+LIGHT_RED = "\033[91m"
+LIGHT_GREEN = "\033[92m"
+LIGHT_YELLOW = "\033[93m"
+LIGHT_BLUE = "\033[94m"
+LIGHT_MAGENTA = "\033[95m"
+LIGHT_CYAN = "\033[96m"
 
 # If the stack becomes too complex to figure out a caller we go through and assume the first valid module is the caller.
 # This works reasonably well but isn't 100% accurate and will only happen if the caller is a thread.
-def print_out(message, color):
-	stack = inspect.stack()
-	# Interestingly the if statement below is not executed when excepting KeyboardInterrupts. Weird.
-	# To prevent a crash we assume the module's name is 'Unknown'
-	module = "Unknown"
-	if inspect.getmodule(stack[2][0]) == None:
-		for i in stack[2:]:
-			if inspect.getmodule(i[0]) != None:
-				module = inspect.getmodule(i[0]).__name__
-	else:
-		module = inspect.getmodule(stack[2][0]).__name__
-	print("[%s] %s: %s%s\033[0m" % (time.strftime("%x %H:%M:%S"), module, color, message))
+def print_out(message, color, file):
+    stack_ = stack()
+    # Interestingly the if statement below is not executed when excepting KeyboardInterrupts. Weird.
+    # To prevent a crash we assume the module's name is 'Unknown'
+    module = "Unknown"
+    if getmodule(stack_[2][0]) == None:
+        for i in stack_[2:]:
+            if getmodule(i[0]) != None:
+                module = getmodule(i[0]).__name__
+    else:
+        module = getmodule(stack_[2][0]).__name__
+    print("[%s] %s: %s%s\033[0m" % (strftime("%H:%M:%S"), module, color, message), file=file)
+    file.flush()
 
 
-def info(message):
-	print_out(message, '')
+def info(message, color=""):
+    print_out(message, color, stdout)
 
 
 def header(message):
-	print_out(message, '\033[95m')
+    print_out(message, MAGENTA, stdout)
 
 
 def warning(message):
-	print_out(message, '\033[93m')
+    print_out(message, YELLOW, stderr)
 
 
 def error(message):
-	print_out(message, '\033[91m')
+    print_out(message, RED, stderr)
 
 
-def success(message, color="green"):
-	if color == "green":
-		print_out(message, '\033[92m')
-	elif color == "blue":
-		print_out(message, '\033[94m')
+def success(message):
+    print_out(message, GREEN, stdout)
 
 
-def bold(message):
-	print_out(message, '\033[1m')
+if __name__ == "__main__":
+    import sys
+    info("Hi!", color=UNDERLINE+BACKGROUND_GREEN+RED)
+    header("This is a header")
+    warning("This is a warning")    # > stderr
+    error("This is an error")       # > stderr
+    success("Great success!")
+    
 
 
-def underline(message):
-	print_out(message, '\033[1m')
+
 
