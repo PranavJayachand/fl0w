@@ -1,4 +1,4 @@
-class Route:
+class ServerRoute:
 	def __init__(self, **kwargs):
 		self.setup(**kwargs)
 
@@ -8,6 +8,9 @@ class Route:
 	def run(self, data, handler):
 		pass
 
+class ClientRoute:
+	def run(self, data, handler):
+		pass
 
 def create_routes(routes):
 	routes = routes.copy()
