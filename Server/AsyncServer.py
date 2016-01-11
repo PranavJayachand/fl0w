@@ -6,10 +6,11 @@ import _thread
 
 
 class Server:
-	def __init__(self, host_port_pair):
+	def __init__(self, host_port_pair, debug=False):
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.sock.bind(host_port_pair)
 		self.sock.listen(2)
+		self.debug = debug
 
 
 	def run(self, handler, handler_args=[]):
@@ -23,11 +24,12 @@ class Server:
 		self.sock.close()
 
 	def controller(self, sock, info, handler_args):
-		sock = ESock(sock)
+		sock = ESock(sock) if not self.debug else ESock(sock, debug=True)
 		handler = self.handler(sock, info, **handler_args)
 		while 1:
 			try:
-				handler.handle(*sock.recv())
+				data, route = sock.recv()
+				handler.handle(data, route)
 			except (socket.error, OSError):
 				handler.finish()
 				handler.sock.close()

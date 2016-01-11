@@ -2,10 +2,13 @@ import json
 import socket
 import struct
 import DataTypes
+import Logging
 
 class ESock:
-	def __init__(self, sock):
+	def __init__(self, sock, debug=False):
 		self._sock = sock
+		self.address, self.port = self._sock.getpeername()
+		self.debug = debug
 
 	def __getattr__(self, attr):
 		if attr == "recv":
@@ -40,10 +43,15 @@ class ESock:
 			data = data.decode()
 		elif data_type == DataTypes.json:
 			data = json.loads(data.decode())
+		if self.debug:
+			Logging.info("Received %d-long '%s' on route '%s': %s (%s:%d)" % (data_length, type(data).__name__, route, str(data), self.address, self.port))
 		return data, route
 
 	def send(self, data, route=""):
+		length = len(data)
 		data_type = type(data)
+		if self.debug:
+			Logging.info("Sending %d-long '%s' on route '%s': %s (%s:%d)" % (length, data_type.__name__, route, str(data), self.address, self.port))		
 		route = route.encode()
 		if data_type is str:
 			data = data.encode()
@@ -55,6 +63,7 @@ class ESock:
 			self.sendall(struct.pack("cI16s", DataTypes.bin, len(data), route) + data)
 		else:
 			self.sendall(struct.pack("cI16s", DataTypes.other, len(data), route) + data)
+
 
 
 	def __eq__(self, other):
