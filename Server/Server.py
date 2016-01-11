@@ -1,10 +1,11 @@
 import Logging
 import Routing
+import VarSync
 
 from .AsyncServer import Server
 from .Broadcast import Broadcast
 
-class Info(Routing.Route):
+class Info(Routing.ServerRoute):
 	def setup(self, **kwargs):
 		self.message = kwargs.pop("message")
 		self.counter = 0
@@ -33,10 +34,13 @@ class SublimeHandler(Server.Handler):
 		Logging.info("'%s:%d' disconnected." % (self.info[0], self.info[1]))
 
 
-server = Server(("127.0.0.1", 3077))
+server = Server(("127.0.0.1", 3077), debug=True)
+varsync = VarSync.Server()
+varsync.links = ["link1", "link2"]
+print(varsync.attrs)
 try:
 	Logging.header("fl0w server started.")
-	server.run(SublimeHandler, {"routes" : {"info" : (Info, {"message" : "Test"})}, "broadcast" : Broadcast()})
+	server.run(SublimeHandler, {"routes" : {"info" : (Info, {"message" : "Test"}), "varsync" : varsync}, "broadcast" : Broadcast()})
 except KeyboardInterrupt:
 	server.stop()
 	Logging.warning("Gracefully shutting down server.")
