@@ -18,6 +18,7 @@ import sublime_plugin
 
 import socket
 from ESock import ESock
+import VarSync
 import Routing
 from SublimeMenu import *
 
@@ -47,18 +48,21 @@ class HandledESock:
 			self._sock.send(data, prefix)
 		except OSError:
 			self.disconnect()
+			_thread.exit()
 
 	def recv(self):
 		try:
 			return self._sock.recv()
 		except OSError:
 			self.disconnect()
+			_thread.exit()
 
 
 def sock_handler(sock, routes, handler):
-	data = sock.recv()
-	if data[1] in routes:
-		routes[data[1]].run(data[0], handler)
+	while 1:
+		data = sock.recv()
+		if data[1] in routes:
+			routes[data[1]].run(data[0], handler)
 
 
 class ReloadHandler(FileSystemEventHandler):
@@ -74,13 +78,13 @@ class ReloadHandler(FileSystemEventHandler):
 class Fl0w:
 	def __init__(self):
 		self.connected = False
-
+		self.varsync = None
 		self.window = None
 		self.start_menu = Items()
 		self.start_menu.add_item(Item("Connect", "Connect to a fl0w server", action=self.invoke_connect))
 		self.start_menu.add_item(Item("About", "Information about fl0w", action=self.invoke_about))
 		self.main_menu = Items()
-		self.main_menu.add_item(Item("Choose Link", "Select Link on which code is executed", action=self.invoke_info))
+		self.main_menu.add_item(Item("Choose Link", "Select Link on which code is executed", action=self.invoke_link_chooser))
 		self.main_menu.add_item(Item("Info", "Server info", action=self.invoke_info))
 		self.main_menu.add_item(Item("Disconnect", "Disconnect from server", action=self.invoke_disconnect))
 
@@ -94,10 +98,16 @@ class Fl0w:
 		if sublime.ok_cancel_dialog("fl0w by @robot0nfire", "robot0nfire.com"):	
 			webbrowser.open("http://robot0nfire.com")
 
-	def invoke_info(self):
-		self.sock.send({}, "info")
+	def invoke_link_chooser(self):
+		link_menu = Items()
+		print(self.varsync.attrs)
+		for link in self.varsync.links:
+			print(link)
 
-	class Info(Routing.Route):
+	def invoke_info(self):
+		self.sock.send("", "info")
+
+	class Info(Routing.ClientRoute):
 		def run(self, data, fl0w):
 			sublime.message_dialog(data)
 
@@ -117,7 +127,8 @@ class Fl0w:
 				self.sock = HandledESock(ESock(socket.create_connection((connect_details[0], int(connect_details[1])))), self.invoke_disconnect)
 				sublime.status_message("Connected to %s:%s." % (connect_details[0], connect_details[1]))
 				self.connected = True
-				_thread.start_new_thread(sock_handler, (self.sock, {"info" : Fl0w.Info()}, self))
+				self.varsync = VarSync.Client(self.sock)
+				_thread.start_new_thread(sock_handler, (self.sock, {"info" : Fl0w.Info(), "varsync" : self.varsync}, self))
 			except OSError as e:
 				sublime.error_message("Error during connection creation:\n %s" % str(e))
 		else:
