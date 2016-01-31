@@ -18,7 +18,6 @@ import sublime_plugin
 
 import socket
 from ESock import ESock
-import VarSync
 import Routing
 from SublimeMenu import *
 
@@ -43,10 +42,11 @@ class HandledESock:
 			return self.send
 		return getattr(self._sock, attr)
 
-	def send(self, data, prefix):
+	def send(self, data, route):
 		try:
-			self._sock.send(data, prefix)
+			self._sock.send(data, route)
 		except OSError:
+			self._sock.close()
 			self.disconnect()
 			_thread.exit()
 
@@ -54,11 +54,13 @@ class HandledESock:
 		try:
 			return self._sock.recv()
 		except OSError:
+			self._sock.close()
 			self.disconnect()
 			_thread.exit()
 
 
 def sock_handler(sock, routes, handler):
+	sock.send("st", "set_type")
 	while 1:
 		data = sock.recv()
 		if data[1] in routes:
@@ -78,17 +80,22 @@ class ReloadHandler(FileSystemEventHandler):
 class Fl0w:
 	def __init__(self):
 		self.connected = False
-		self.varsync = None
 		self.window = None
-		self.start_menu = Items()
-		self.start_menu.add_item(Item("Connect", "Connect to a fl0w server", action=self.invoke_connect))
-		self.start_menu.add_item(Item("About", "Information about fl0w", action=self.invoke_about))
-		self.main_menu = Items()
-		self.main_menu.add_item(Item("Choose Link", "Select Link on which code is executed", action=self.invoke_link_chooser))
-		self.main_menu.add_item(Item("Info", "Server info", action=self.invoke_info))
-		self.main_menu.add_item(Item("Disconnect", "Disconnect from server", action=self.invoke_disconnect))
 
-		
+		self.start_menu = Menu()
+		self.start_menu.add(Entry("Connect", "Connect to a fl0w server", action=self.invoke_connect))
+		self.start_menu.add(Entry("About", "Information about fl0w", action=self.invoke_about))
+		self.main_menu = Menu()
+		self.main_menu.add(Entry("Wallaby Control", "Control a connected Wallaby", action=self.invoke_wallaby_control))
+		self.main_menu.add(Entry("Info", "Server info", action=self.invoke_info))
+		self.main_menu.add(Entry("Debug", "Toggle debug levels", action=self.invoke_debug_level))
+		self.main_menu.add(Entry("Disconnect", "Disconnect from server", action=self.invoke_disconnect))
+
+	
+	class ErrorReport(Routing.ClientRoute):
+		def run(self, data, handler):
+			sublime.error_message(data)
+
 
 	# Input invokers
 	def invoke_connect(self):
@@ -98,25 +105,56 @@ class Fl0w:
 		if sublime.ok_cancel_dialog("fl0w by @robot0nfire", "robot0nfire.com"):	
 			webbrowser.open("http://robot0nfire.com")
 
-	def invoke_link_chooser(self):
-		link_menu = Items()
-		print(self.varsync.attrs)
-		for link in self.varsync.links:
-			print(link)
+	def invoke_wallaby_control(self):
+		self.sock.send("list", "wallaby_control")
+
+
+	class WallabyControl(Routing.ClientRoute):
+		def run(self, data, handler):
+			wallaby_menu = Menu(subtitles=False)
+			entry_count = 0
+			for wallaby in data:
+				wallaby_menu.add(Entry(wallaby, action=handler.wallaby_control_submenu, kwargs={"wallaby" : wallaby}))
+				entry_count += 1
+			if entry_count != 0:
+				wallaby_menu.invoke(handler.window, back=handler.main_menu)
+			else:
+				sublime.error_message("No Wallabies connected.")
+
+
+	def wallaby_control_submenu(self, wallaby):
+		menu = Menu(subtitles=False)
+		for command in ("Stop", "Restart", "Disconnect"):
+			menu.add(Entry(command, action=self.sock.send, kwargs={"data" : {wallaby : command.lower()}, "route" : "wallaby_control"}))
+		menu.invoke(self.window)
+
+
+	def invoke_debug_level(self):
+		debug_menu = Menu(subtitles=False)
+		debug_menu.add(Entry("On", action=self.set_debug, kwargs={"debug" : True}))
+		debug_menu.add(Entry("Off", action=self.set_debug, kwargs={"debug" : False}))
+		debug_menu.invoke(self.window, back=self.main_menu)
+
+	def set_debug(self, debug):
+		print("Debug now %s" % debug)
+		self.sock.debug = debug
+
 
 	def invoke_info(self):
 		self.sock.send("", "info")
 
 	class Info(Routing.ClientRoute):
-		def run(self, data, fl0w):
+		def run(self, data, handler):
 			sublime.message_dialog(data)
+			handler.main_menu.invoke(handler.window)
 
 
 
 	def invoke_disconnect(self):
 		self.sock.close()
+		if self.connected:
+			sublime.message_dialog("Connection closed")
 		self.connected = False
-		sublime.message_dialog("Connection closed")
 
 
 
@@ -127,8 +165,8 @@ class Fl0w:
 				self.sock = HandledESock(ESock(socket.create_connection((connect_details[0], int(connect_details[1])))), self.invoke_disconnect)
 				sublime.status_message("Connected to %s:%s." % (connect_details[0], connect_details[1]))
 				self.connected = True
-				self.varsync = VarSync.Client(self.sock)
-				_thread.start_new_thread(sock_handler, (self.sock, {"info" : Fl0w.Info(), "varsync" : self.varsync}, self))
+				_thread.start_new_thread(sock_handler, (self.sock, {"error_report": Fl0w.ErrorReport(), "info" : Fl0w.Info(), "wallaby_control" : Fl0w.WallabyControl()}, self))
+				self.main_menu.invoke(self.window)
 			except OSError as e:
 				sublime.error_message("Error during connection creation:\n %s" % str(e))
 		else:
