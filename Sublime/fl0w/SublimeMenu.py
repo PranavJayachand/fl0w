@@ -12,73 +12,76 @@ class Input:
 			self.on_done, self.on_change, self.on_cancel)
 
 
-class Item:
-	def __init__(self, name, description="", action=None, items=None, input=None):
+class Entry:
+	def __init__(self, name, description="", action=None, kwargs={}, sub_menu=None, input=None):
 		self.name = name
 		self.description = description
 		self.action = action
-		self.items = items
+		self.kwargs = kwargs
+		self.sub_menu = sub_menu
 		self.input = input
 
 	def __eq__(self, other):
 		return self.__dict__ == other.__dict__
 
 
-class Items:
-	def __init__(self, selected_index=-1, on_highlight=None):
+class Menu:
+	def __init__(self, selected_index=-1, on_highlight=None, subtitles=True):
 		self.selected_index = selected_index
 		self.on_highlight = on_highlight
-		self.items = {}
-		self.item_names = []
+		self.subtitles = subtitles
+		self.entries = {}
 		self.window = None
 		self.back = None
 
 	def invoke(self, window, back=None):
 		self.window = window
+		self.back = back
+		entries = self.menu_entries
 		if back:
-			items = [["Back", "Back to previous menu"]] + self.item_names[:]
-			self.back = back
-		else:
-			items = self.item_names
-			self.back = None
-		window.show_quick_panel(items, self._action, 
+			entries.insert(0, ["Back", "Back to previous menu"])
+		if not self.subtitles:
+			for entry_index in range(len(entries)):
+				del entries[entry_index][1]
+		window.show_quick_panel(entries, self._action, 
 			flags=0, selected_index=self.selected_index, 
 			on_highlight=self.on_highlight)
 
-	def _action(self, item_id):
-		if item_id != -1:
+	def _action(self, entry_id):
+		if entry_id != -1:
 			if self.back:
-				if item_id != 0:
-					item = self.items[item_id - 1]
+				if entry_id != 0:
+					entry = self.entries[entry_id - 1]
 				else:
 					self.back.invoke(self.window)
 					return
 			else:
-				item = self.items[item_id]
-			if item.action != None:
-				item.action() 
-			if item.input != None:
-				item.input.invoke(self.window)
-			if item.items != None:
-				item.items.invoke(self.window, back=self)
+				entry = self.entries[entry_id]
+			if entry.action != None:
+				entry.action(**entry.kwargs) 
+			if entry.input != None:
+				entry.input.invoke(self.window)
+			if entry.sub_menu != None:
+				entry.sub_menu.invoke(self.window, back=self)
+
+	@property
+	def menu_entries(self):
+		entries = []
+		for entry_id in self.entries:
+			entries.append([self.entries[entry_id].name, self.entries[entry_id].description])
+		return entries
 					
 
-	def add_item(self, item):
-		if len(self.items) > 0:
-			item_id = tuple(self.items.keys())[-1] + 1
+	def add(self, entry):
+		if len(self.entries) > 0:
+			entry_id = tuple(self.entries.keys())[-1] + 1
 		else:
-			item_id = 0
-		self.items[item_id] = item
-		if item.description != None: 
-			self.item_names.append([item.name, item.description])
-		else:
-			self.item_names.append([item.name, ""])
+			entry_id = 0
+		self.entries[entry_id] = entry
 
-	def rm_item(self, item):
-		if item in self.items.values():
-			for i in self.items:
-				if self.items[i] == item:
-					del self.items[i]
-					del self.item_names[i]
-					return True
-		return False
+
+	def remove(self, entry):
+		if entry in self.entries.values():
+			for entry_id in self.entries:
+				if self.entries[entry_id] == entry:
+					del self.entries[entry_id]
