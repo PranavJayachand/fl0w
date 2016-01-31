@@ -4,6 +4,24 @@ import struct
 import DataTypes
 import Logging
 
+class ConvertFailedError(ValueError):
+	def __init__(self):
+		super(ConvertFailedError, self).__init__("conversion failed (false data type supplied)")
+
+def convert_data(data, data_type):
+	try:
+		if data_type == DataTypes.str:
+			data = data.decode()
+		elif data_type == DataTypes.int:
+			data = int(data.decode())
+		elif data_type == DataTypes.float:
+			data = float(data.decode())
+		elif data_type == DataTypes.json:
+			data = json.loads(data.decode())
+	except Exception:
+		raise ConvertFailedError()
+	return data
+
 class ESock:
 	def __init__(self, sock, debug=False):
 		self._sock = sock
@@ -25,7 +43,12 @@ class ESock:
 		if raw_metadata == b"":
 			self._sock.close()
 			raise socket.error("Connection closed")
-		metadata = struct.unpack("cI16s", raw_metadata)
+		try:
+			metadata = struct.unpack("cI16s", raw_metadata)
+		except struct.error:
+			Logging.error("Invalid metadata layout: '%s:%d'" % (self.address, self.port))
+			self._sock.close()
+			return None, ""
 		data_type = metadata[0]
 		data_length = metadata[1]
 		route = metadata[2].rstrip(b"\x00").decode()
@@ -39,19 +62,22 @@ class ESock:
 			if not packet:
 				return None
 			data += packet
-		if data_type == DataTypes.str:
-			data = data.decode()
-		elif data_type == DataTypes.json:
-			data = json.loads(data.decode())
+		try:
+			data = convert_data(data, data_type)
+		except ConvertFailedError:
+			Logging.error("Invalid data type: '%s:%d'" % (self.address, self.port))
+			self._sock.close()
+			return None, ""
 		if self.debug:
-			Logging.info("Received %d-long '%s' on route '%s': %s (%s:%d)" % (data_length, type(data).__name__, route, str(data), self.address, self.port))
+			Logging.info("Received %d-long '%s' on route '%s': %s (%s:%d)" % (data_length, type(data).__name__, route, str(data).replace("\n", " "), self.address, self.port))
 		return data, route
+
 
 	def send(self, data, route=""):
 		length = len(data)
 		data_type = type(data)
 		if self.debug:
-			Logging.info("Sending %d-long '%s' on route '%s': %s (%s:%d)" % (length, data_type.__name__, route, str(data), self.address, self.port))		
+			Logging.info("Sending %d-long '%s' on route '%s': %s (%s:%d)" % (length, data_type.__name__, route, str(data).replace("\n", " "), self.address, self.port))		
 		route = route.encode()
 		if data_type is str:
 			data = data.encode()
@@ -61,10 +87,13 @@ class ESock:
 			self.sendall(struct.pack("cI16s", DataTypes.json, len(data), route) + data)
 		elif data_type is bytes:
 			self.sendall(struct.pack("cI16s", DataTypes.bin, len(data), route) + data)
+		elif data_type is int:
+			self.sendall(struct.pack("cI16s", DataTypes.int, len(data), route) + data)
+		elif data_type is float:
+			self.sendall(struct.pack("cI16s", DataTypes.float, len(data), route) + data)
 		else:
 			self.sendall(struct.pack("cI16s", DataTypes.other, len(data), route) + data)
 
 
-
 	def __eq__(self, other):
-		return self.__dict == other.__dict__
+		return self is other
