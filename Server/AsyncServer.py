@@ -1,6 +1,9 @@
 from ESock import ESock
 import DataTypes
+import Logging
 
+import sys
+import traceback
 import socket
 import _thread
 
@@ -10,17 +13,24 @@ class Server:
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.sock.bind(host_port_pair)
 		self.sock.listen(2)
+		self.socks = []
 		self.debug = debug
 
 
-	def run(self, handler, handler_args=[]):
+	def run(self, handler, handler_args={}):
 		self.handler = handler
 		while 1:
 			sock, info = self.sock.accept()
+			self.socks.append(sock)
 			_thread.start_new_thread(self.controller, (sock, info, handler_args))
 
 
 	def stop(self):
+		for sock in self.socks:
+			try:
+				sock.close()
+			except (socket.error, OSError):
+				pass
 		self.sock.close()
 
 	def controller(self, sock, info, handler_args):
@@ -32,7 +42,18 @@ class Server:
 				handler.handle(data, route)
 			except (socket.error, OSError):
 				handler.finish()
-				handler.sock.close()
+				if sock in self.socks:
+					del self.socks[self.socks.index(sock)]
+				sock.close()
+				_thread.exit()
+			except Exception:
+				Logging.error("An unhandled exception forced the controller for '%s:%d' to terminate." % (sock.address, sock.port))
+				exc_type, exc_value, exc_traceback = sys.exc_info()
+				traceback.print_exception(exc_type, exc_value, exc_traceback)
+				handler.finish()
+				if sock in self.socks:
+					del self.socks[self.socks.index(sock)]
+				sock.close()
 				_thread.exit()
 
 
@@ -40,10 +61,9 @@ class Server:
 		def __init__(self, sock, info, **kwargs):
 			self.sock = sock
 			self.info = info
-			self.kwargs = kwargs
-			self.setup()
+			self.setup(**kwargs)
 
-		def setup(self):
+		def setup(self, **kwargs):
 			pass
 
 		def handle(self, data):
