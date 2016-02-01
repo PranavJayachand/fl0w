@@ -8,4 +8,4 @@ fl0w includes open source libraries or adapted code from the following projects:
 
 **Contact:**  
 [team@robot0nfire.com](mailto:team@robot0nfire.com)  
-[robot0nfire.com](mailto:http://robot0nfire.com)
+[robot0nfire.com](http://robot0nfire.com)
