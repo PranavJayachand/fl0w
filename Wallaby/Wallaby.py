@@ -10,7 +10,8 @@ import sys
 class WallabyControl(Routing.ClientRoute):
 	def run(self, data, handler):
 		commands = {"stop" : self.stop, "restart" : self.restart, 
-		"disconnect" : self.disconnect, "reboot" : self.reboot}
+		"disconnect" : self.disconnect, "reboot" : self.reboot, 
+		"shutdown" : self.shutdown}
 		if data in commands:
 			commands[data](handler)
 
