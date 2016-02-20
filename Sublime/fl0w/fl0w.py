@@ -27,6 +27,7 @@ def plugin_unloaded():
 	observer.stop()
 	try:
 		fl0w.sock.close()
+		fl0w.connected = False
 	except:
 		pass
 	print("Observer stopped!")
@@ -99,7 +100,9 @@ class Fl0w:
 
 	# Input invokers
 	def invoke_connect(self):
-		Input("Address:Port", initial_text="", on_done=self.connect).invoke(self.window)
+		address = sublime.load_settings("fl0w.sublime-setting").get("server_address")
+		address = "" if type(address) is not str else address
+		Input("Address:Port", initial_text=address, on_done=self.connect).invoke(self.window)
 
 	def invoke_about(self):
 		if sublime.ok_cancel_dialog("fl0w by @robot0nfire", "robot0nfire.com"):	
@@ -135,6 +138,7 @@ class Fl0w:
 		debug_menu.add(Entry("Off", action=self.set_debug, kwargs={"debug" : False}))
 		debug_menu.invoke(self.window, back=self.main_menu)
 
+
 	def set_debug(self, debug):
 		print("Debug now %s" % debug)
 		self.sock.debug = debug
@@ -159,6 +163,7 @@ class Fl0w:
 
 
 	def connect(self, connect_details):
+		connect_details_raw = connect_details
 		connect_details = connect_details.split(":")
 		if len(connect_details) == 2:
 			try:
@@ -166,6 +171,8 @@ class Fl0w:
 				sublime.status_message("Connected to %s:%s." % (connect_details[0], connect_details[1]))
 				self.connected = True
 				_thread.start_new_thread(sock_handler, (self.sock, {"error_report": Fl0w.ErrorReport(), "info" : Fl0w.Info(), "wallaby_control" : Fl0w.WallabyControl()}, self))
+				sublime.load_settings("fl0w.sublime-setting").set("server_address", connect_details_raw)
+				sublime.save_settings("fl0w.sublime-setting")
 				self.main_menu.invoke(self.window)
 			except OSError as e:
 				sublime.error_message("Error during connection creation:\n %s" % str(e))
