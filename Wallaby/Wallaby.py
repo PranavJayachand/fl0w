@@ -26,6 +26,9 @@ class WallabyControl(Routing.ClientRoute):
 		os.system("reboot")
 		exit(0)
 
+	def shutdown(self, handler):
+		os.system("shutdown -h 0")
+
 	def disconnect(self, handler):
 		handler.sock.close()
 

@@ -104,7 +104,7 @@ class Fl0w:
 
 	def wallaby_control_submenu(self, wallaby):
 		menu = Menu(subtitles=False)
-		for command in ("Stop", "Restart", "Reboot", "Disconnect"):
+		for command in ("Stop", "Restart", "Shutdown", "Reboot", "Disconnect"):
 			menu.add(Entry(command, action=self.sock.send, kwargs={"data" : {wallaby : command.lower()}, "route" : "wallaby_control"}))
 		menu.invoke(self.window)
 

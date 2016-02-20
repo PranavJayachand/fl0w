@@ -27,7 +27,7 @@ class WallabyControl(Routing.ServerRoute):
 			for wallaby in handler.broadcast.channels[Handler.Channels.WALLABY]:
 				address_pair = "%s:%d" % (wallaby.address, wallaby.port)
 				if address_pair in data.keys():
-					if data[address_pair] in ("stop", "restart", "disconnect", "reboot"):
+					if data[address_pair] in ("stop", "restart", "disconnect", "reboot", "shutdown"):
 						wallaby.send(data[address_pair], "wallaby_control")
 					elif type(data[address_pair]) is dict:
 						if "run" in data[address_pair]:
