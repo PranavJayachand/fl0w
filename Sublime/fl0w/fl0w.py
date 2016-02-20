@@ -26,46 +26,23 @@ import webbrowser
 def plugin_unloaded():
 	observer.stop()
 	try:
-		fl0w.sock.close()
-		fl0w.connected = False
+		fl0w.invoke_disconnect()
 	except:
 		pass
 	print("Observer stopped!")
 
 
-class HandledESock:
-	def __init__(self, sock, disconnect):
-		self._sock = sock
-		self.disconnect = disconnect
-
-	def __getattr__(self, attr):
-		if attr == "send":
-			return self.send
-		return getattr(self._sock, attr)
-
-	def send(self, data, route):
-		try:
-			self._sock.send(data, route)
-		except OSError:
-			self._sock.close()
-			self.disconnect()
-			_thread.exit()
-
-	def recv(self):
-		try:
-			return self._sock.recv()
-		except OSError:
-			self._sock.close()
-			self.disconnect()
-			_thread.exit()
-
 
 def sock_handler(sock, routes, handler):
 	sock.send("st", "set_type")
 	while 1:
-		data = sock.recv()
-		if data[1] in routes:
-			routes[data[1]].run(data[0], handler)
+		try:
+			data = sock.recv()
+			if data[1] in routes:
+				routes[data[1]].run(data[0], handler)
+		except (OSError, socket.error):
+			handler.invoke_disconnect()
+			break
 
 
 class ReloadHandler(FileSystemEventHandler):
@@ -127,7 +104,7 @@ class Fl0w:
 
 	def wallaby_control_submenu(self, wallaby):
 		menu = Menu(subtitles=False)
-		for command in ("Stop", "Restart", "Disconnect"):
+		for command in ("Stop", "Restart", "Reboot", "Disconnect"):
 			menu.add(Entry(command, action=self.sock.send, kwargs={"data" : {wallaby : command.lower()}, "route" : "wallaby_control"}))
 		menu.invoke(self.window)
 
@@ -167,7 +144,7 @@ class Fl0w:
 		connect_details = connect_details.split(":")
 		if len(connect_details) == 2:
 			try:
-				self.sock = HandledESock(ESock(socket.create_connection((connect_details[0], int(connect_details[1])))), self.invoke_disconnect)
+				self.sock = ESock(socket.create_connection((connect_details[0], int(connect_details[1]))), disconnect_callback=self.invoke_disconnect)
 				sublime.status_message("Connected to %s:%s." % (connect_details[0], connect_details[1]))
 				self.connected = True
 				_thread.start_new_thread(sock_handler, (self.sock, {"error_report": Fl0w.ErrorReport(), "info" : Fl0w.Info(), "wallaby_control" : Fl0w.WallabyControl()}, self))

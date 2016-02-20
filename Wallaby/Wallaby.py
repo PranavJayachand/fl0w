@@ -9,7 +9,8 @@ import sys
 
 class WallabyControl(Routing.ClientRoute):
 	def run(self, data, handler):
-		commands = {"stop" : self.stop, "restart" : self.restart, "disconnect" : self.disconnect}
+		commands = {"stop" : self.stop, "restart" : self.restart, 
+		"disconnect" : self.disconnect, "reboot" : self.reboot}
 		if data in commands:
 			commands[data](handler)
 
@@ -20,6 +21,9 @@ class WallabyControl(Routing.ClientRoute):
 		self.disconnect(handler)
 		time.sleep(15)
 		os.execl(sys.executable, *([sys.executable]+sys.argv))
+
+	def reboot(self, handler):
+		os.system("reboot")
 
 	def disconnect(self, handler):
 		handler.sock.close()

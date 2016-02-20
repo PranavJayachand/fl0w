@@ -27,11 +27,13 @@ class WallabyControl(Routing.ServerRoute):
 			for wallaby in handler.broadcast.channels[Handler.Channels.WALLABY]:
 				address_pair = "%s:%d" % (wallaby.address, wallaby.port)
 				if address_pair in data.keys():
-					if data[address_pair] in ("stop", "restart", "disconnect"):
+					if data[address_pair] in ("stop", "restart", "disconnect", "reboot"):
 						wallaby.send(data[address_pair], "wallaby_control")
 					elif type(data[address_pair]) is dict:
 						if "run" in data[address_pair]:
 							Logging.warning("Remote binary execution not yet implemented. (file_sync and compile required)")
+					else:
+						Logging.warning("'%s:%d' has issued an invalid control command." % (handler.info[0], handler.info[1]))
 				return
 			handler.sock.send("Wallaby not connected anymore.", "error_report")
 
@@ -78,7 +80,7 @@ class Handler(Server.Handler):
 		Logging.info("'%s:%d' disconnected." % (self.sock.address, self.sock.port))
 
 
-server = Server(("127.0.0.1", 3077), debug=True)
+server = Server(("172.20.10.3", 3077), debug=True)
 
 broadcast = Broadcast()
 # Populating broadcast channels with all channels defined in Handler.Channels
