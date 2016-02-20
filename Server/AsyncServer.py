@@ -7,6 +7,9 @@ import traceback
 import socket
 import _thread
 
+def capture_trace():
+	exc_type, exc_value, exc_traceback = sys.exc_info()
+	traceback.print_exception(exc_type, exc_value, exc_traceback)
 
 class Server:
 	def __init__(self, host_port_pair, debug=False):
@@ -48,9 +51,11 @@ class Server:
 				_thread.exit()
 			except Exception:
 				Logging.error("An unhandled exception forced the controller for '%s:%d' to terminate." % (sock.address, sock.port))
-				exc_type, exc_value, exc_traceback = sys.exc_info()
-				traceback.print_exception(exc_type, exc_value, exc_traceback)
-				handler.finish()
+				capture_trace()
+				try:
+					handler.finish()
+				except Exception:
+					capture_trace()
 				if sock in self.socks:
 					del self.socks[self.socks.index(sock)]
 				sock.close()
