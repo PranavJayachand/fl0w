@@ -39,12 +39,12 @@ class ESock:
 
 
 	def recv(self):
-		raw_metadata = self._sock.recv(24)
+		raw_metadata = self._sock.recv(32)
 		if raw_metadata == b"":
 			self._sock.close()
 			raise socket.error("Connection closed")
 		try:
-			metadata = struct.unpack("cI16s", raw_metadata)
+			metadata = struct.unpack("cQ16s", raw_metadata)
 		except struct.error:
 			Logging.error("Invalid metadata layout: '%s:%d'" % (self.address, self.port))
 			self._sock.close()
@@ -81,18 +81,18 @@ class ESock:
 		route = route.encode()
 		if data_type is str:
 			data = data.encode()
-			self.sendall(struct.pack("cI16s", DataTypes.str, len(data), route) + data)
+			self.sendall(struct.pack("cQ16s", DataTypes.str, len(data), route) + data)
 		elif data_type is dict or data_type is list:
 			data = json.dumps(data).encode()
-			self.sendall(struct.pack("cI16s", DataTypes.json, len(data), route) + data)
+			self.sendall(struct.pack("cQ16s", DataTypes.json, len(data), route) + data)
 		elif data_type is bytes:
-			self.sendall(struct.pack("cI16s", DataTypes.bin, len(data), route) + data)
+			self.sendall(struct.pack("cQ16s", DataTypes.bin, len(data), route) + data)
 		elif data_type is int:
-			self.sendall(struct.pack("cI16s", DataTypes.int, len(data), route) + data)
+			self.sendall(struct.pack("cQ16s", DataTypes.int, len(data), route) + data)
 		elif data_type is float:
-			self.sendall(struct.pack("cI16s", DataTypes.float, len(data), route) + data)
+			self.sendall(struct.pack("cQ16s", DataTypes.float, len(data), route) + data)
 		else:
-			self.sendall(struct.pack("cI16s", DataTypes.other, len(data), route) + data)
+			self.sendall(struct.pack("cQ16s", DataTypes.other, len(data), route) + data)
 
 
 	def __eq__(self, other):
