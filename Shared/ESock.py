@@ -23,10 +23,11 @@ def convert_data(data, data_type):
 	return data
 
 class ESock:
-	def __init__(self, sock, debug=False):
+	def __init__(self, sock, debug=False, disconnect_callback=None):
 		self._sock = sock
 		self.address, self.port = self._sock.getpeername()
 		self.debug = debug
+		self.disconnect_callback = disconnect_callback
 
 	def __getattr__(self, attr):
 		if attr == "recv":
@@ -47,6 +48,8 @@ class ESock:
 			metadata = struct.unpack("cQ16s", raw_metadata)
 		except struct.error:
 			Logging.error("Invalid metadata layout: '%s:%d'" % (self.address, self.port))
+			if self.disconnect_callback != None:
+				self.disconnect_callback()
 			self._sock.close()
 			return None, ""
 		data_type = metadata[0]
@@ -66,6 +69,8 @@ class ESock:
 			data = convert_data(data, data_type)
 		except ConvertFailedError:
 			Logging.error("Invalid data type: '%s:%d'" % (self.address, self.port))
+			if self.disconnect_callback != None:
+				self.disconnect_callback()
 			self._sock.close()
 			return None, ""
 		if self.debug:
