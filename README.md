@@ -70,3 +70,5 @@ fl0w was creating using following libraries:
 ## Licensing
 
 See [LICENSE](LICENSE)
+
+[![forthebadge](http://forthebadge.com/images/badges/built-by-hipsters.svg)](http://forthebadge.com)
