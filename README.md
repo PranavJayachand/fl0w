@@ -38,7 +38,7 @@ For setting up the environment just run:
 
 ## Using fl0w
 
-1. Connect to a fl0w server in Sublime Text (Tools → Command Pallet → fl0w: Menu → Connect)
+1. Connect to a fl0w server in Sublime Text (Tools → Command Pallet → fl0w: Menu → Connect)
 
 2. Connect a Wallaby
 
