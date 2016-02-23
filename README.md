@@ -15,7 +15,7 @@ These instructions give the most direct way to a working fl0w environment.
 |------|-----------|
 |**OS X**|![](https://img.shields.io/badge/status-supported-brightgreen.svg)|
 |**Linux**|![](https://img.shields.io/badge/status-supported-brightgreen.svg)|
-|**Windows**|![](https://img.shields.io/badge/status-kinda%20supported-red.svg)|
+|**Windows**|![](https://img.shields.io/badge/status-kinda%20supported-yellow.svg)|
 
 A Unix like operating system running on an ARMv7 bases device with clang or gcc and Python 3.5 is required on the server.
 The Sublime Text client is platform independent, although only OS X and Linux are officially supported.
