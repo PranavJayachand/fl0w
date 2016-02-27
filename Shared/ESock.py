@@ -88,7 +88,7 @@ class ESock:
 			data = data.encode()
 			self.sendall(struct.pack("cQ16s", DataTypes.str, len(data), route) + data)
 		elif data_type is dict or data_type is list:
-			data = json.dumps(data).encode()
+			data = json.dumps(data, separators=(',',':')).encode()
 			self.sendall(struct.pack("cQ16s", DataTypes.json, len(data), route) + data)
 		elif data_type is bytes:
 			self.sendall(struct.pack("cQ16s", DataTypes.bin, len(data), route) + data)
