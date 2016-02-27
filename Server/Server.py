@@ -1,10 +1,12 @@
 import Logging
 import Routing
+import Config
 
 from .AsyncServer import Server
 from .Broadcast import Broadcast
 
 from time import strftime
+from time import time
 
 class Info(Routing.ServerRoute):
 	def setup(self):
@@ -65,6 +67,7 @@ class Handler(Server.Handler):
 		self.routes = Routing.create_routes(routes)
 		self.broadcast = broadcast
 		self.channel = None
+		self.start_time = time()
 
 		
 	def handle(self, data, route):
@@ -80,7 +83,19 @@ class Handler(Server.Handler):
 		Logging.info("'%s:%d' disconnected." % (self.sock.address, self.sock.port))
 
 
-server = Server(("172.20.10.3", 3077), debug=True)
+CONFIG_PATH = "server.cfg"
+
+config = Config.Config()
+config.add(Config.Option("server_address", ("127.0.0.1", 3077)))
+config.add(Config.Option("debug", True, validator=lambda x: True if True or False else False))
+
+try:
+	config = config.read_from_file(CONFIG_PATH)
+except FileNotFoundError:
+	config.write_to_file(CONFIG_PATH)
+	config = config.read_from_file(CONFIG_PATH)
+
+server = Server(config.server_address, debug=config.debug)
 
 broadcast = Broadcast()
 # Populating broadcast channels with all channels defined in Handler.Channels
