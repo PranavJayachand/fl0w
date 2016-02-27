@@ -66,7 +66,7 @@ class Fl0w:
 		self.main_menu = Menu()
 		self.main_menu.add(Entry("Wallaby Control", "Control a connected Wallaby", action=self.invoke_wallaby_control))
 		self.main_menu.add(Entry("Info", "Server info", action=self.invoke_info))
-		self.main_menu.add(Entry("Debug", "Toggle debug levels", action=self.invoke_debug_level))
+		self.main_menu.add(Entry("Debug", "Debug options", action=self.invoke_debug_options))
 		self.main_menu.add(Entry("Disconnect", "Disconnect from server", action=self.invoke_disconnect))
 
 	
@@ -109,10 +109,12 @@ class Fl0w:
 		menu.invoke(self.window)
 
 
-	def invoke_debug_level(self):
+	def invoke_debug_options(self):
 		debug_menu = Menu(subtitles=False)
 		debug_menu.add(Entry("On", action=self.set_debug, kwargs={"debug" : True}))
 		debug_menu.add(Entry("Off", action=self.set_debug, kwargs={"debug" : False}))
+		debug_menu.add(Entry("Sync Settings", action=self.invoke_sync_settings))
+		
 		debug_menu.invoke(self.window, back=self.main_menu)
 
 
