@@ -6,11 +6,11 @@ class Broadcast:
 	def __init__(self):
 		self.channels = {}
 
-	def broadcast(self, data, channel, exclude=[]):
+	def broadcast(self, data, route, channel, exclude=[]):
 		if channel in self.channels:
 			for sock in self.channels[channel]:
 				if not sock in exclude:
-					sock.send(data)
+					sock.send(data, route)
 		else:
 			raise Broadcast.ChannelError(channel)
 
