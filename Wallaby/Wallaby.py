@@ -1,5 +1,6 @@
 import fl0w
 from ESock import ESock
+from Sync import SyncClient
 import Routing
 import socket
 import time
@@ -41,11 +42,14 @@ class WallabyClient:
 		self.sock = ESock(socket.create_connection(host_port_pair), debug=debug)
 		self.connected = True
 		self.debug = debug
-		self.routes = {"wallaby_control" : WallabyControl()}
+		self.sync = SyncClient(self.sock, "wallaby_testing", "w_sync")
+		self.routes = {"wallaby_control" : WallabyControl(), "w_sync" : self.sync}
 
 
 	def start(self):
+		print(os.curdir)
 		self.sock.send("w", "set_type")
+		self.sync.start()
 		while 1 and self.connected:
 			try:
 				data = self.sock.recv()
@@ -58,7 +62,7 @@ class WallabyClient:
 	def stop(self):
 		self.sock.close()
 
-wallaby_client = WallabyClient(("127.0.0.1", 3077))
+wallaby_client = WallabyClient(("127.0.0.1", 3077), debug=True)
 try:
 	wallaby_client.start()
 except KeyboardInterrupt:
