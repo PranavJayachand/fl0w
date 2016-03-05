@@ -20,15 +20,17 @@ import socket
 from ESock import ESock
 import Routing
 from SublimeMenu import *
+import Logging
 
 import webbrowser
 
 def plugin_unloaded():
 	observer.stop()
 	try:
-		fl0w.invoke_disconnect()
+		for window in windows:
+			window.fl0w.invoke_disconnect()
 	except:
-		pass
+		print("Error while unloading fl0w for %s" % window.folders())
 	print("Observer stopped!")
 
 
@@ -113,13 +115,11 @@ class Fl0w:
 		debug_menu = Menu(subtitles=False)
 		debug_menu.add(Entry("On", action=self.set_debug, kwargs={"debug" : True}))
 		debug_menu.add(Entry("Off", action=self.set_debug, kwargs={"debug" : False}))
-		debug_menu.add(Entry("Sync Settings", action=self.invoke_sync_settings))
-		
 		debug_menu.invoke(self.window, back=self.main_menu)
 
 
 	def set_debug(self, debug):
-		print("Debug now %s" % debug)
+		sublime.status_message("fl0w: Debug now '%s'" % debug)
 		self.sock.debug = debug
 
 
@@ -134,10 +134,10 @@ class Fl0w:
 
 
 	def invoke_disconnect(self):
-		self.sock.close()
 		if self.connected:
-			sublime.message_dialog("Connection closed")
+			sublime.message_dialog("Connection closed ('%s')" % ", ".join(self.window.folders()))
 		self.connected = False
+		self.sock.close()
 
 
 
@@ -146,10 +146,13 @@ class Fl0w:
 		connect_details = connect_details.split(":")
 		if len(connect_details) == 2:
 			try:
-				self.sock = ESock(socket.create_connection((connect_details[0], int(connect_details[1]))), disconnect_callback=self.invoke_disconnect)
+				# Establish connection to the server
+				self.sock = ESock(socket.create_connection((connect_details[0], int(connect_details[1]))), disconnect_callback=self.invoke_disconnect, debug=True)
 				sublime.status_message("Connected to %s:%s." % (connect_details[0], connect_details[1]))
 				self.connected = True
-				_thread.start_new_thread(sock_handler, (self.sock, {"error_report": Fl0w.ErrorReport(), "info" : Fl0w.Info(), "wallaby_control" : Fl0w.WallabyControl()}, self))
+				_thread.start_new_thread(sock_handler, (self.sock, {"error_report": Fl0w.ErrorReport(), 
+					"info" : Fl0w.Info(), "wallaby_control" : Fl0w.WallabyControl()}, self))
+				# Saving last server address
 				sublime.load_settings("fl0w.sublime-setting").set("server_address", connect_details_raw)
 				sublime.save_settings("fl0w.sublime-setting")
 				self.main_menu.invoke(self.window)
@@ -162,16 +165,31 @@ class Fl0w:
 
 class Fl0wCommand(sublime_plugin.WindowCommand):
 	def run(self, menu=None, action=None): 
-		if fl0w.window == None:
-			fl0w.window = self.window
-		if not fl0w.connected:
-			fl0w.start_menu.invoke(self.window)
+		valid_window_setup = True
+		folder_count = len(self.window.folders())
+		if folder_count > 1:
+			sublime.error_message("Only one open folder per window is allowed.")
+			valid_window_setup = False
+		elif folder_count == 0:
+			sublime.error_message("No folder open in window.")
+			valid_window_setup = False			
+		if valid_window_setup:
+			if not hasattr(self.window, "fl0w"):
+				self.window.fl0w = Fl0w()
+				self.window.fl0w.window = self.window
+				windows.append(self.window)
+			
+			if not self.window.fl0w.connected:
+				self.window.fl0w.start_menu.invoke(self.window)
+			else:
+				self.window.fl0w.main_menu.invoke(self.window)
 		else:
-			fl0w.main_menu.invoke(self.window)
+			if hasattr(self.window, "fl0w"):
+				if self.window.fl0w.connected:
+					self.window.fl0w.invoke_disconnect()
 
 
-
-fl0w = Fl0w()
+windows = []
 observer = Observer()
 observer.schedule(ReloadHandler(), path=".", recursive=True)
 #observer.start()
