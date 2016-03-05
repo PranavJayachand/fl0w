@@ -2,19 +2,20 @@ import Logging
 import Routing
 import Config
 
+from Sync import SyncServer
+
 from .AsyncServer import Server
 from .Broadcast import Broadcast
 
 from time import strftime
 from time import time
+import json
+
 
 class Info(Routing.ServerRoute):
-	def setup(self):
-		self.start_time = strftime("%H:%M:%S")
-
 	def run(self, data, handler):
 		handler.sock.send("Start time: %s\nConnected ST clients: %d\nConnected Wallabies: %d\nAvaliable routes: %s" % (
-			self.start_time, len(handler.broadcast.channels[Handler.Channels.SUBLIME]),
+			handler.start_time, len(handler.broadcast.channels[Handler.Channels.SUBLIME]),
 			len(handler.broadcast.channels[Handler.Channels.WALLABY]), ", ".join([route for route in list(handler.routes.keys())])), "info")
 
 
@@ -62,10 +63,12 @@ class Handler(Server.Handler):
 		SUBLIME = 1
 		WALLABY = 2
 
-	def setup(self, routes, broadcast):
+	def setup(self, routes, broadcast, last_stop_time):
 		Logging.info("Handler for '%s:%d' initalised." % (self.sock.address, self.sock.port))
 		self.routes = Routing.create_routes(routes)
+		self.cached_routes = {}
 		self.broadcast = broadcast
+		self.last_stop_time = last_stop_time
 		self.channel = None
 		self.start_time = time()
 
@@ -77,13 +80,26 @@ class Handler(Server.Handler):
 			self.sock.send("Invalid route '%s'" % route, "error_report")
 
 
+	def get_route(self, route_instance):
+		if route_instance not in self.cached_routes: 
+			for route in self.routes:
+				if self.routes[route] is route_instance:
+					self.cached_routes[route_instance] = route
+				return route
+			return None
+		else:
+			return self.cached_routes[route_instance]
+
+
 	def finish(self):
 		if self.channel != None:
 			self.broadcast.remove(self.sock, self.channel)
 		Logging.info("'%s:%d' disconnected." % (self.sock.address, self.sock.port))
 
 
+
 CONFIG_PATH = "server.cfg"
+INFO_PATH = "server.info"
 
 config = Config.Config()
 config.add(Config.Option("server_address", ("127.0.0.1", 3077)))
@@ -104,10 +120,20 @@ for channel in Handler.Channels.__dict__:
 		broadcast.add_channel(Handler.Channels.__dict__[channel])
 
 try:
-	Logging.header("fl0w server started.")
+	Logging.header("fl0w server started on '%s:%d'" % (config.server_address[0], config.server_address[1]))
+	last_stop_time = 0
+	try:
+		last_stop_time = json.loads(open(INFO_PATH, "r").read())["last_stop_time"]
+	except IOError:
+		Logging.warning("Unable to obtain last shutdown time. (You can ignore this message if it's your first time starting fl0w)")
+	except (ValueError, KeyError):
+		Logging.error("%s has been modified an contains invalid information." % CONFIG_PATH)
+	Logging.info("Last shutdown time: %d" % last_stop_time)
 	server.run(Handler, 
-		{"broadcast" : broadcast, 
-		"routes" : {"info" : Info(), "wallaby_control" : WallabyControl(), "set_type" : SetType()}})
+		{"broadcast" : broadcast, "last_stop_time" : last_stop_time,
+		"routes" : {"info" : Info(), "wallaby_control" : WallabyControl(), "set_type" : SetType(), 
+		"w_sync" : SyncServer("Wallaby")}})
 except KeyboardInterrupt:
 	server.stop()
+	open(INFO_PATH, "w").write(json.dumps({"last_stop_time" : time()}))
 	Logging.warning("Gracefully shutting down server.")
