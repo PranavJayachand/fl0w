@@ -3,6 +3,8 @@ import hashlib
 import time
 import base64
 
+import Routing
+
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
@@ -21,7 +23,7 @@ def relative_recursive_ls(path, relative_to, exclude=[]):
 
 
 def md5(path):
-	hashlib.md5(open(path, "rb").read()).hexdigest()
+	return hashlib.md5(open(path, "rb").read()).hexdigest()
 
 
 def get_name_from_path(path):
@@ -59,8 +61,8 @@ class SyncClient(Routing.ClientRoute):
 	def __init__(self, sock, folder, route, exclude=[".DS_Store", ".git"]):
 		self.sock = sock
 		self.folder = folder if folder[-1] == "/" else folder + "/"
-		self.route = route
 		self.started = False
+		self.route = route
 		self.exclude = exclude
 		self.files = relative_recursive_ls(folder, folder, exclude=self.exclude)
 		self.surpressed_fs_events = []
@@ -70,10 +72,11 @@ class SyncClient(Routing.ClientRoute):
 
 
 	def start(self):
-		out = {"list"}
+		out = {"list" : {}}
 		for file in self.files:
-			out["list"][file] = {"mtime" : os.path.getmtime(file), "md5" : md5(file)}
-		self.sock.send({self.route : out})
+			out["list"].update({file : {"mtime" : os.path.getmtime(self.folder + file), "md5" : md5(self.folder + file)}})
+		print(out)
+		self.sock.send(out, self.route)
 		self.started = True
 
 	def stop(self):
@@ -105,7 +108,7 @@ class SyncClient(Routing.ClientRoute):
 			elif "req" in data:
 				for file in data["req"]:
 					if file in self.files:
-						self.sock.send({self.route : {"add" : {"content" : b64.b64encode(get_file_content(file)), "mtime" : os.path.getmtime(file)}}})
+						self.sock.send({"add" : {"content" : base64.b64encode(get_file_content(file)).encode(), "mtime" : os.path.getmtime(file)}}, self.route)
 
 
 	def modified(self, event):
@@ -114,7 +117,7 @@ class SyncClient(Routing.ClientRoute):
 			if relpath not in self.files:
 				self.files.append(relpath)
 			if not relpath in self.surpressed_fs_events:
-				self.sock.send({self.route : {"add" : {"content" : b64.b64encode(get_file_content(event.src_path)), "mtime" : os.path.getmtime(event.src_path)}}})
+				self.sock.send({"add" : {"content" : base64.b64encode(get_file_content(event.src_path)).encode(), "mtime" : os.path.getmtime(event.src_path)}}, self.route)
 
 
 	def created(self, event):
@@ -127,21 +130,23 @@ class SyncClient(Routing.ClientRoute):
 			if relpath in self.files:
 				del self.files[self.files.index(relpath)]
 			if not relpath in self.surpressed_fs_events:
-				self.sock.send({self.route : {"del" : [relpath]}})
+				self.sock.send({"del" : [relpath]}, self.route)
 
 
 class SyncServer:
-	def __init__(self, sock, folder, route, exclude=[".DS_Store", ".git"]):
-		self.sock = sock
+	def __init__(self, folder, exclude=[".DS_Store", ".git"]):
 		self.folder = folder if folder[-1] == "/" else folder + "/"
-		self.route = route
 		self.exclude = exclude
 		self.files = relative_recursive_ls(folder, folder, exclude=self.exclude)
 		self.surpressed_fs_events = []
+
+
+
+	def start(self):
+		self.files = relative_recursive_ls(folder, folder, exclude=self.exclude)
 		observer = Observer()
 		observer.schedule(ReloadHandler(self), path=self.folder, recursive=True)
 		observer.start()
-		self.on_start()
 
 
 	def surpress_fs_event(self, file):
@@ -158,18 +163,19 @@ class SyncServer:
 		if type(data) is dict:
 			if "list" in data:
 				for file in data["list"]:
-					if file["mtime"] < handler.start_time:
+					print(file)
+					if data["list"][file]["mtime"] < handler.last_stop_time:
 						if file in self.files:
-							if file["md5"] != md5(file):
-								handler.sock.send({self.route : {"del" : [file]}})
+							if data["list"][file]["md5"] != md5(file):
+								handler.sock.send({"del" : [file]}, handler.get_route(self))
 						else:
-							handler.sock.send({self.route : {"del" : [file]}})
+							handler.sock.send({"del" : [file]}, handler.get_route(self))
 					else:
-						handler.sock.send({self.route : {"req" : [file]}})
+						handler.sock.send({"req" : [file]}, handler.get_route(self))
 			elif "add" in data:
 				for file in data["add"]:
 					self.surpress_fs_event(file)
-					open(file, "wb+").write(base64.b64decode(data["add"][file]["content"]))
+					open(file, "wb+").write(base64.b64decode(data["add"][file]["content"].decode()))
 					os.utime(file, data["add"][file]["mtime"])
 					self.unsupress_fs_event(file)
 			elif "del" in data:
@@ -183,9 +189,9 @@ class SyncServer:
 		if relpath not in self.files:
 			self.files.append(relpath)
 		if not relpath in self.surpressed_fs_events:
-			self.broadcast({self.route : {"add" : {
-				"content" : b64.b64encode(get_file_content(event.src_path)), 
-				"mtime" : os.path.getmtime(event.src_path)}}}, channel)
+			handler.broadcast({"add" : {
+				"content" : base64.b64encode(get_file_content(event.src_path)).encode(), 
+				"mtime" : os.path.getmtime(event.src_path)}}, handler.get_route(self), channel)
 
 
 	def created(self, event):
@@ -197,4 +203,4 @@ class SyncServer:
 		if relpath in self.files:
 			del self.files[self.files.index(relpath)]
 		if not relpath in self.surpressed_fs_events:
-			self.broadcast({self.route : {"del" : [relpath]}}, channel)
+			handler.broadcast({"del" : [relpath]}, handler.get_route(self), channel)
