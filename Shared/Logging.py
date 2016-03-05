@@ -5,6 +5,13 @@ from inspect import stack
 from sys import stderr
 from sys import stdout
 
+
+try:
+    import sublime
+    print_fallback = True
+except ImportError:
+    print_fallback = False
+
 # Formatting
 BOLD = "\033[1m"
 HIDDEN = "\033[2m"
@@ -63,9 +70,11 @@ def print_out(message, color, file):
                 module = getmodule(i[0]).__name__
     else:
         module = getmodule(stack_[2][0]).__name__
-    print("[%s] %s: %s%s\033[0m" % (strftime("%H:%M:%S"), module, color, message), file=file)
-    file.flush()
-
+    if not print_fallback:
+        print("[%s] %s: %s%s\033[0m" % (strftime("%H:%M:%S"), module, color, message), file=file)
+        file.flush()
+    else:
+        print("[%s] %s: %s" % (strftime("%H:%M:%S"), module, message))
 
 def info(message, color=""):
     print_out(message, color, stdout)
