@@ -74,7 +74,7 @@ class ESock:
 			self._sock.close()
 			return None, ""
 		if self.debug:
-			Logging.info("Received %d-long '%s' on route '%s': %s (%s:%d)" % (data_length, type(data).__name__, route, str(data).replace("\n", " "), self.address, self.port))
+			Logging.info("Received %d-long '%s' on route '%s': %s (%s:%d)" % (len(data), type(data).__name__, route, str(data).replace("\n", " "), self.address, self.port))
 		return data, route
 
 
