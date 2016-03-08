@@ -47,16 +47,12 @@ class WallabyClient:
 
 
 	def start(self):
-		print(os.curdir)
 		self.sock.send("w", "set_type")
 		self.sync.start()
 		while 1 and self.connected:
-			try:
-				data = self.sock.recv()
-				if data[1] in self.routes:
-					self.routes[data[1]].run(data[0], self)
-			except (OSError, socket.error):
-				self.connected = False
+			data = self.sock.recv()
+			if data[1] in self.routes:
+				self.routes[data[1]].run(data[0], self)
 
 
 	def stop(self):
