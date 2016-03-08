@@ -36,6 +36,16 @@ class Config:
 	def read_from_file(self, file):
 		if isfile(file):
 			config = load_source("config", file)
+			for option in self.options:
+				found = False
+				for attr in dir(config):
+					if not attr.startswith("__"):
+						if option.name == attr:
+							found = True
+							break
+				if not found:
+					self.write_to_file(file)
+					return self.read_from_file(file)
 			return config
 		else:
 			raise FileNotFoundError()
