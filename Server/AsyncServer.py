@@ -43,7 +43,10 @@ class Server:
 			try:
 				data, route = sock.recv()
 				handler.handle(data, route)
-			except (socket.error, OSError):
+			except (BrokenPipeError, ConnectionResetError, OSError) as e:
+				if type(e) is OSError:
+					if str(e) not in ("Connection closed", "Bad file descriptor"):
+						raise
 				handler.finish()
 				if sock in self.socks:
 					del self.socks[self.socks.index(sock)]
