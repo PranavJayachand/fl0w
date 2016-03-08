@@ -5,3 +5,5 @@ Testing
 *.cfg
 server.info
 server.cfg
+wallaby_testing
+Binaries/*
