@@ -10,6 +10,7 @@ from .Broadcast import Broadcast
 from time import strftime
 from time import time
 import json
+import os
 
 
 class Info(Routing.ServerRoute):
@@ -63,13 +64,13 @@ class Handler(Server.Handler):
 		SUBLIME = 1
 		WALLABY = 2
 
-	def setup(self, routes, broadcast, last_stop_time):
+	def setup(self, routes, broadcast, last_stop):
 		Logging.info("Handler for '%s:%d' initalised." % (self.sock.address, self.sock.port))
-		self.routes = Routing.create_routes(routes)
 		self.cached_routes = {}
 		self.broadcast = broadcast
-		self.last_stop_time = last_stop_time
+		self.last_stop = last_stop
 		self.channel = None
+		self.routes = Routing.create_routes(routes, self)
 		self.start_time = time()
 
 		
@@ -104,6 +105,8 @@ INFO_PATH = "server.info"
 config = Config.Config()
 config.add(Config.Option("server_address", ("127.0.0.1", 3077)))
 config.add(Config.Option("debug", True, validator=lambda x: True if True or False else False))
+config.add(Config.Option("binary_path", "Binaries", validator=os.path.isdir))
+config.add(Config.Option("source_path", "Source", validator=os.path.isdir))
 
 try:
 	config = config.read_from_file(CONFIG_PATH)
@@ -121,19 +124,22 @@ for channel in Handler.Channels.__dict__:
 
 try:
 	Logging.header("fl0w server started on '%s:%d'" % (config.server_address[0], config.server_address[1]))
-	last_stop_time = 0
+	# Trying to obtain last stop time
+	last_stop = 0
 	try:
-		last_stop_time = json.loads(open(INFO_PATH, "r").read())["last_stop_time"]
+		last_stop = json.loads(open(INFO_PATH, "r").read())["last_stop"]
 	except IOError:
 		Logging.warning("Unable to obtain last shutdown time. (You can ignore this message if it's your first time starting fl0w)")
 	except (ValueError, KeyError):
 		Logging.error("%s has been modified an contains invalid information." % CONFIG_PATH)
-	Logging.info("Last shutdown time: %d" % last_stop_time)
+	Logging.info("Last shutdown time: %d" % last_stop)
 	server.run(Handler, 
-		{"broadcast" : broadcast, "last_stop_time" : last_stop_time,
-		"routes" : {"info" : Info(), "wallaby_control" : WallabyControl(), "set_type" : SetType(), 
-		"w_sync" : SyncServer("Wallaby")}})
+		{"broadcast" : broadcast, "last_stop" : last_stop,
+		"routes" : {"info" : Info(), "wallaby_control" : WallabyControl(), "set_type" : SetType(),
+		"w_sync" : SyncServer(config.binary_path, Handler.Channels.WALLABY)}})
 except KeyboardInterrupt:
+	Logging.header("Gracefully shutting down server.")
 	server.stop()
-	open(INFO_PATH, "w").write(json.dumps({"last_stop_time" : time()}))
-	Logging.warning("Gracefully shutting down server.")
+	# Dumping stop time
+	open(INFO_PATH, "w").write(json.dumps({"last_stop" : time()}))
+	Logging.success("Server shutdown successful.")
