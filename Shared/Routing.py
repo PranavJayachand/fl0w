@@ -1,6 +1,5 @@
 BROADCAST = 0
 ROUTE = 1
-LAST_STOP = 2
 
 class InvalidRouteSetup(AttributeError):
 	def __init__(self, msg):
@@ -16,6 +15,13 @@ class ServerRoute:
 	def run(self, data, handler):
 		pass
 
+	def start(self, handler):
+		pass
+
+	def stop(self, handler):
+		pass
+
+
 class ClientRoute:
 	def run(self, data, handler):
 		pass
@@ -30,14 +36,9 @@ def create_routes(routes, handler):
 	for prefix in routes:
 		attrs = dir(routes[prefix])
 		if "REQUIRED" in attrs:
-			if not "start" in attrs:
-				raise InvalidRouteSetup("method named 'start' required if 'REQUIRE' is defined")
 			for required in type(routes[prefix]).REQUIRED:
 				if required == BROADCAST:
 					routes[prefix].broadcast = handler.broadcast
 				elif required == ROUTE:
 					routes[prefix].route = reverse_routes[routes[prefix]]
-				elif required == LAST_STOP:
-					routes[prefix].last_stop = handler.last_stop
-			routes[prefix].start()
 	return routes
