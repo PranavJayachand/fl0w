@@ -42,7 +42,7 @@ class WallabyClient:
 		self.sock = ESock(socket.create_connection(host_port_pair), debug=debug)
 		self.connected = True
 		self.debug = debug
-		self.sync = SyncClient(self.sock, "wallaby_testing", "w_sync")
+		self.sync = SyncClient(self.sock, sys.argv[1], "w_sync")
 		self.routes = {"wallaby_control" : WallabyControl(), "w_sync" : self.sync}
 
 
