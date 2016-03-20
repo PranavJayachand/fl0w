@@ -46,10 +46,10 @@ class SetType(Routing.ServerRoute):
 	def run(self, data, handler):
 		if data == "st":
 			handler.channel = Handler.Channels.SUBLIME
-			handler.broadcast.add(handler.sock, handler.channel)
+			handler.broadcast.add(handler, handler.channel)
 		elif data == "w":
 			handler.channel = Handler.Channels.WALLABY
-			handler.broadcast.add(handler.sock, handler.channel)
+			handler.broadcast.add(handler, handler.channel)
 		else:
 			handler.sock.close()
 			return
@@ -59,19 +59,42 @@ class SetType(Routing.ServerRoute):
 			"Unknown (will not subscribe to broadcast)"))
 
 
+class GetInfo(Routing.ServerRoute):
+	REQUIRED = [Routing.ROUTE]
+
+	def run(self, data, handler):
+		if "type" in data:
+			if data["type"] == "st":
+				handler.channel = Handler.Channels.SUBLIME
+				handler.broadcast.add(handler, handler.channel)
+			elif data["type"] == "w":
+				handler.channel = Handler.Channels.WALLABY
+				handler.broadcast.add(handler, handler.channel)
+		if "name" in data:
+			handler.sock.name = data["name"]
+		Logging.info("'%s:%d' has identified as a %s client." % (handler.info[0], handler.info[1], 
+			"Sublime Text" if handler.channel == Handler.Channels.SUBLIME else 
+			"Wallaby" if handler.channel == Handler.Channels.WALLABY else 
+			"Unknown (will not subscribe to broadcast)"))
+
+	def start(self, handler):
+		handler.sock.send("", self.route)
+
+
 class Handler(Server.Handler):
 	class Channels:
 		SUBLIME = 1
 		WALLABY = 2
 
-	def setup(self, routes, broadcast, last_stop):
+	def setup(self, routes, broadcast):
 		Logging.info("Handler for '%s:%d' initalised." % (self.sock.address, self.sock.port))
-		self.cached_routes = {}
 		self.broadcast = broadcast
-		self.last_stop = last_stop
 		self.channel = None
 		self.routes = Routing.create_routes(routes, self)
 		self.start_time = time()
+		self.name = "Unknown"
+		for route in self.routes:
+			self.routes[route].start(self)		
 
 		
 	def handle(self, data, route):
@@ -81,22 +104,21 @@ class Handler(Server.Handler):
 			self.sock.send("Invalid route '%s'" % route, "error_report")
 
 
-	def get_route(self, route_instance):
-		if route_instance not in self.cached_routes: 
-			for route in self.routes:
-				if self.routes[route] is route_instance:
-					self.cached_routes[route_instance] = route
-				return route
-			return None
-		else:
-			return self.cached_routes[route_instance]
-
-
 	def finish(self):
 		if self.channel != None:
-			self.broadcast.remove(self.sock, self.channel)
+			self.broadcast.remove(self, self.channel)
+		for route in self.routes:
+			self.routes[route].stop(self)
 		Logging.info("'%s:%d' disconnected." % (self.sock.address, self.sock.port))
 
+
+def folder_validator(folder):
+	if not os.path.isdir(folder):
+		try:
+			os.mkdir(folder)
+		except OSError:
+			return False
+	return True
 
 
 CONFIG_PATH = "server.cfg"
@@ -105,8 +127,8 @@ INFO_PATH = "server.info"
 config = Config.Config()
 config.add(Config.Option("server_address", ("127.0.0.1", 3077)))
 config.add(Config.Option("debug", True, validator=lambda x: True if True or False else False))
-config.add(Config.Option("binary_path", "Binaries", validator=os.path.isdir))
-config.add(Config.Option("source_path", "Source", validator=os.path.isdir))
+config.add(Config.Option("binary_path", "Binaries", validator=folder_validator))
+config.add(Config.Option("source_path", "Source", validator=folder_validator))
 
 try:
 	config = config.read_from_file(CONFIG_PATH)
@@ -124,22 +146,12 @@ for channel in Handler.Channels.__dict__:
 
 try:
 	Logging.header("fl0w server started on '%s:%d'" % (config.server_address[0], config.server_address[1]))
-	# Trying to obtain last stop time
-	last_stop = 0
-	try:
-		last_stop = json.loads(open(INFO_PATH, "r").read())["last_stop"]
-	except IOError:
-		Logging.warning("Unable to obtain last shutdown time. (You can ignore this message if it's your first time starting fl0w)")
-	except (ValueError, KeyError):
-		Logging.error("%s has been modified an contains invalid information." % CONFIG_PATH)
-	Logging.info("Last shutdown time: %d" % last_stop)
 	server.run(Handler, 
-		{"broadcast" : broadcast, "last_stop" : last_stop,
-		"routes" : {"info" : Info(), "wallaby_control" : WallabyControl(), "set_type" : SetType(),
-		"w_sync" : SyncServer(config.binary_path, Handler.Channels.WALLABY)}})
+		{"broadcast" : broadcast,
+		"routes" : {"info" : Info(), "wallaby_control" : WallabyControl(), "set_type" : SetType(), "get_info" : GetInfo(),
+		"w_sync" : SyncServer(config.binary_path, Handler.Channels.WALLABY, deleted_db_path="deleted-w.db"),
+		"s_sync" : SyncServer(config.source_path, Handler.Channels.SUBLIME, deleted_db_path="deleted-s.db")}})
 except KeyboardInterrupt:
 	Logging.header("Gracefully shutting down server.")
 	server.stop()
-	# Dumping stop time
-	open(INFO_PATH, "w").write(json.dumps({"last_stop" : time()}))
 	Logging.success("Server shutdown successful.")
