@@ -8,23 +8,23 @@ class Broadcast:
 
 	def broadcast(self, data, route, channel, exclude=[]):
 		if channel in self.channels:
-			for sock in self.channels[channel]:
-				if not sock in exclude:
-					sock.send(data, route)
+			for handler in self.channels[channel]:
+				if not handler in exclude:
+					handler.sock.send(data, route)
 		else:
 			raise Broadcast.ChannelError(channel)
 
-	def remove(self, sock, channel):
+	def remove(self, handler, channel):
 		if channel in self.channels:
-			if sock in self.channels[channel]:
-				del self.channels[channel][self.channels[channel].index(sock)]
+			if handler in self.channels[channel]:
+				del self.channels[channel][self.channels[channel].index(handler)]
 		else:
 			raise Broadcast.ChannelError(channel)
 
-	def add(self, sock, channel):
+	def add(self, handler, channel):
 		if channel in self.channels:
-			if not sock in self.channels[channel]:
-				self.channels[channel].append(sock)
+			if not handler in self.channels[channel]:
+				self.channels[channel].append(handler)
 		else:
 			raise Broadcast.ChannelError(channel)
 
