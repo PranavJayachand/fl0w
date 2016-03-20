@@ -6,7 +6,7 @@ import Logging
 
 class ConvertFailedError(ValueError):
 	def __init__(self):
-		super(ConvertFailedError, self).__init__("conversion failed (false data type supplied)")
+		super(ValueError, self).__init__("conversion failed (false data type supplied)")
 
 def convert_data(data, data_type):
 	try:
@@ -23,6 +23,8 @@ def convert_data(data, data_type):
 	return data
 
 class ESock:
+	DATA_TYPES = {str : DataTypes.str, dict : DataTypes.json, list : DataTypes.json, bytes : DataTypes.bin, int : DataTypes.int, float : DataTypes.float}
+	
 	def __init__(self, sock, debug=False, disconnect_callback=None):
 		self._sock = sock
 		self.address, self.port = self._sock.getpeername()
@@ -80,25 +82,22 @@ class ESock:
 
 	def send(self, data, route=""):
 		length = len(data)
-		data_type = type(data)
+		original_data_type = type(data)
 		if self.debug:
-			Logging.info("Sending %d-long '%s' on route '%s': %s (%s:%d)" % (length, data_type.__name__, route, str(data).replace("\n", " "), self.address, self.port))		
+			Logging.info("Sending %d-long '%s' on route '%s': %s (%s:%d)" % (length, original_data_type.__name__, route, str(data).replace("\n", " "), self.address, self.port))		
 		route = route.encode()
-		if data_type is str:
-			data = data.encode()
-			self.sendall(struct.pack("cQ16s", DataTypes.str, len(data), route) + data)
-		elif data_type is dict or data_type is list:
-			data = json.dumps(data, separators=(',',':')).encode()
-			self.sendall(struct.pack("cQ16s", DataTypes.json, len(data), route) + data)
-		elif data_type is bytes:
-			self.sendall(struct.pack("cQ16s", DataTypes.bin, len(data), route) + data)
-		elif data_type is int:
-			self.sendall(struct.pack("cQ16s", DataTypes.int, len(data), route) + data)
-		elif data_type is float:
-			self.sendall(struct.pack("cQ16s", DataTypes.float, len(data), route) + data)
+		if original_data_type in ESock.DATA_TYPES:
+			data_type = ESock.DATA_TYPES[original_data_type]
 		else:
-			self.sendall(struct.pack("cQ16s", DataTypes.other, len(data), route) + data)
+			data_type = DataTypes.other
+		if original_data_type is str:
+			data = data.encode()
+		elif original_data_type is dict or original_data_type is list:
+			data = json.dumps(data, separators=(',',':')).encode()
+		self.sendall(struct.pack("cQ16s", data_type, len(data), route) + data)
 
 
 	def __eq__(self, other):
-		return self is other
+		if type(other) is ESock:
+			return self._sock is other._sock
+		return False
