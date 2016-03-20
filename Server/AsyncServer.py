@@ -3,13 +3,11 @@ import DataTypes
 import Logging
 
 import sys
-import traceback
+from Utils import capture_trace
 import socket
 import _thread
 
-def capture_trace():
-	exc_type, exc_value, exc_traceback = sys.exc_info()
-	traceback.print_exception(exc_type, exc_value, exc_traceback)
+
 
 class Server:
 	def __init__(self, host_port_pair, debug=False):
@@ -37,33 +35,44 @@ class Server:
 		self.sock.close()
 
 	def controller(self, sock, info, handler_args):
-		sock = ESock(sock) if not self.debug else ESock(sock, debug=True)
+		sock = ESock(sock) if not self.debug else ESock(sock, debug=self.debug)
 		handler = self.handler(sock, info, **handler_args)
 		while 1:
 			try:
 				data, route = sock.recv()
 				handler.handle(data, route)
 			except (BrokenPipeError, ConnectionResetError, OSError) as e:
+				socket_related_error = True
+				if type(e) not in (BrokenPipeError, ConnectionResetError, OSError):
+					socket_related_error = False
 				if type(e) is OSError:
-					if str(e) not in ("Connection closed", "Bad file descriptor"):
-						raise
-				handler.finish()
-				if sock in self.socks:
-					del self.socks[self.socks.index(sock)]
-				sock.close()
+					if str(e) not in ("Connection closed", "[Errno 9] Bad file descriptor"):
+						socket_related_error = False
+				if not socket_related_error:
+					self.print_trace(handler, sock)
+				self.attempt_graceful_close(handler, sock)
 				_thread.exit()
 			except Exception:
-				Logging.error("An unhandled exception forced the controller for '%s:%d' to terminate." % (sock.address, sock.port))
-				capture_trace()
-				try:
-					handler.finish()
-				except Exception:
-					capture_trace()
-				if sock in self.socks:
-					del self.socks[self.socks.index(sock)]
-				sock.close()
+				self.print_trace(handler, sock)
+				self.attempt_graceful_close(handler, sock)
 				_thread.exit()
 
+
+	def print_trace(self, handler, sock):
+		Logging.error("An unhandled exception forced the controller for '%s:%d' to terminate." % (sock.address, sock.port))
+		capture_trace()
+
+
+	def attempt_graceful_close(self, handler, sock):
+		try:
+			handler.finish()
+		except Exception:
+			self.print_trace(handler, sock)
+		finally:		
+			if sock in self.socks:
+				del self.socks[self.socks.index(sock)]
+			sock.close()
+	
 
 	class Handler:
 		def __init__(self, sock, info, **kwargs):
