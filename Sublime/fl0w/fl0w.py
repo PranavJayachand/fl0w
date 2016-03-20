@@ -18,6 +18,7 @@ import sublime_plugin
 
 import socket
 from ESock import ESock
+from Utils import capture_trace
 import Routing
 from SublimeMenu import *
 import Logging
@@ -42,7 +43,10 @@ def sock_handler(sock, routes, handler):
 			data = sock.recv()
 			if data[1] in routes:
 				routes[data[1]].run(data[0], handler)
-		except (OSError, socket.error):
+		except (OSError, socket.error, Exception) as e:
+			if e is Exception:
+				Logging.info("Exception occured in network thread.")
+				capture_trace()
 			handler.invoke_disconnect()
 			break
 
