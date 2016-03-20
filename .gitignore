@@ -5,5 +5,7 @@ Testing
 *.cfg
 server.info
 server.cfg
-wallaby_testing
-Binaries/*
+wallaby_testing*
+Binaries
+Source
+deleted*.db*
