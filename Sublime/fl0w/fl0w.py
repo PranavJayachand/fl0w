@@ -29,7 +29,8 @@ def plugin_unloaded():
 	observer.stop()
 	try:
 		for window in windows:
-			window.fl0w.invoke_disconnect()
+			if hasattr(window, "fl0w"):
+				window.fl0w.invoke_disconnect()
 	except:
 		print("Error while unloading fl0w for %s" % window.folders())
 	print("Observer stopped!")
@@ -62,18 +63,23 @@ class ReloadHandler(FileSystemEventHandler):
 			print("Deleted: %s" % event)
 
 class Fl0w:
-	def __init__(self):
+	def __init__(self, window):
 		self.connected = False
-		self.window = None
+		self.window = window
+		self.folder = window.folders()[0]
 
 		self.start_menu = Menu()
 		self.start_menu.add(Entry("Connect", "Connect to a fl0w server", action=self.invoke_connect))
 		self.start_menu.add(Entry("About", "Information about fl0w", action=self.invoke_about))
+
 		self.main_menu = Menu()
 		self.main_menu.add(Entry("Wallaby Control", "Control a connected Wallaby", action=self.invoke_wallaby_control))
 		self.main_menu.add(Entry("Info", "Server info", action=self.invoke_info))
 		self.main_menu.add(Entry("Debug", "Debug options", action=self.invoke_debug_options))
 		self.main_menu.add(Entry("Disconnect", "Disconnect from server", action=self.invoke_disconnect))
+
+
+
 
 	
 	class ErrorReport(Routing.ClientRoute):
@@ -179,14 +185,29 @@ class Fl0wCommand(sublime_plugin.WindowCommand):
 			valid_window_setup = False			
 		if valid_window_setup:
 			if not hasattr(self.window, "fl0w"):
-				self.window.fl0w = Fl0w()
-				self.window.fl0w.window = self.window
-				windows.append(self.window)
-			
-			if not self.window.fl0w.connected:
-				self.window.fl0w.start_menu.invoke(self.window)
+				folder = self.window.folders()[0]
+				files = os.listdir(folder)
+				if not ".no-fl0w" in files:
+					if not ".flow" in os.listdir(folder):
+						if sublime.ok_cancel_dialog("""We've detected that this is your first time using fl0w in your current directory.
+												We don't want to be responsible for any lost work so please backup your files before proceding. 
+												(An empty project directory is recommended but not necessary.)""", "Yes"):
+							open(folder + "/.fl0w", 'a').close()
+							self.window.fl0w = Fl0w(self.window)
+							windows.append(self.window)
+							self.window.fl0w.start_menu.invoke(self.window)
+						else:
+							sublime.error_message("fl0w can only be run once you've allowed it to operate in your current directory.")
+					else:
+						self.window.fl0w = Fl0w(self.window)
+						windows.append(self.window)	
+				else:
+					sublime.error_message("fl0w can't be opened in your current directory (.no-fl0w file exists)")		
 			else:
-				self.window.fl0w.main_menu.invoke(self.window)
+				if not self.window.fl0w.connected:
+					self.window.fl0w.start_menu.invoke(self.window)
+				else:
+					self.window.fl0w.main_menu.invoke(self.window)
 		else:
 			if hasattr(self.window, "fl0w"):
 				if self.window.fl0w.connected:
