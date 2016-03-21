@@ -118,7 +118,7 @@ class ReloadHandler(FileSystemEventHandler):
 
 
 class SyncClient(Routing.ClientRoute):
-	def __init__(self, sock, folder, route, exclude=[".DS_Store", ".git"]):
+	def __init__(self, sock, folder, route, exclude=[".DS_Store", ".git", ".fl0w"]):
 		self.sock = sock
 		self.folder = folder if folder[-1] == "/" else folder + "/"
 		self.started = False
@@ -209,7 +209,7 @@ class SyncClient(Routing.ClientRoute):
 class SyncServer(Routing.ServerRoute):
 	REQUIRED = (Routing.BROADCAST, Routing.ROUTE)
 
-	def __init__(self, folder, channel, exclude=[".DS_Store", ".git", ".keep"], deleted_db_path="deleted.db", modified_hook=None, deleted_hook=None):
+	def __init__(self, folder, channel, exclude=[".DS_Store", ".git", ".keep", ".fl0w"], deleted_db_path="deleted.db", modified_hook=None, deleted_hook=None):
 		self.folder = folder if folder[-1] == "/" else folder + "/"
 		self.channel = channel
 		self.exclude = exclude
@@ -278,7 +278,6 @@ class SyncServer(Routing.ServerRoute):
 			"mtime" : os.path.getmtime(event.src_path)}}}, self.route, self.channel, exclude=exclude)
 		if exclude != []:
 			del self.broadcast_file_excludes[relpath]
-
 
 
 	def created(self, event):
