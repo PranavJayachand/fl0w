@@ -24,15 +24,15 @@ class WallabyControl(Routing.ServerRoute):
 	def run(self, data, handler):
 		if data == "list":
 			wallabies = []
-			for wallaby in handler.broadcast.channels[Handler.Channels.WALLABY]:
-				wallabies.append("%s:%d" % (wallaby.address, wallaby.port))
+			for wallaby_handler in handler.broadcast.channels[Handler.Channels.WALLABY]:
+				wallabies.append("%s:%d" % (wallaby_handler.sock.address, wallaby_handler.sock.port))
 			handler.sock.send(wallabies, "wallaby_control")
 		elif type(data) is dict:
-			for wallaby in handler.broadcast.channels[Handler.Channels.WALLABY]:
-				address_pair = "%s:%d" % (wallaby.address, wallaby.port)
+			for wallaby_handler in handler.broadcast.channels[Handler.Channels.WALLABY]:
+				address_pair = "%s:%d" % (wallaby_handler.sock.address, wallaby_handler.sock.port)
 				if address_pair in data.keys():
 					if data[address_pair] in ("stop", "restart", "disconnect", "reboot", "shutdown"):
-						wallaby.send(data[address_pair], "wallaby_control")
+						wallaby_handler.sock.send(data[address_pair], "wallaby_control")
 					elif type(data[address_pair]) is dict:
 						if "run" in data[address_pair]:
 							Logging.warning("Remote binary execution not yet implemented. (file_sync and compile required)")
