@@ -188,7 +188,7 @@ class Fl0wCommand(sublime_plugin.WindowCommand):
 				folder = self.window.folders()[0]
 				files = os.listdir(folder)
 				if not ".no-fl0w" in files:
-					if not ".flow" in os.listdir(folder):
+					if not ".flow" in files:
 						if sublime.ok_cancel_dialog("""We've detected that this is your first time using fl0w in your current directory.
 												We don't want to be responsible for any lost work so please backup your files before proceding. 
 												(An empty project directory is recommended but not necessary.)""", "Yes"):
