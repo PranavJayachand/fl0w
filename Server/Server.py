@@ -7,67 +7,129 @@ from Sync import SyncServer
 from .AsyncServer import Server
 from .Broadcast import Broadcast
 
-from time import strftime
-from time import time
 import json
 import os
+import subprocess
+import re
+from subprocess import Popen, PIPE
+
+
+WALLABY_SYNC_ROUTE = "w_sync"
+SUBLIME_SYNC_ROUTE = "s_sync"
 
 
 class Info(Routing.ServerRoute):
 	def run(self, data, handler):
-		handler.sock.send("Start time: %s\nConnected ST clients: %d\nConnected Wallabies: %d\nAvaliable routes: %s" % (
-			handler.start_time, len(handler.broadcast.channels[Handler.Channels.SUBLIME]),
-			len(handler.broadcast.channels[Handler.Channels.WALLABY]), ", ".join([route for route in list(handler.routes.keys())])), "info")
+		handler.sock.send("Connected ST clients: %d\nConnected Wallabies: %d\nAvaliable routes: %s" % (
+			len(handler.broadcast.channels[Handler.Channels.SUBLIME]),
+			len(handler.broadcast.channels[Handler.Channels.WALLABY]), 
+			", ".join([route for route in list(handler.routes.keys())])), "info")
 
 
 class WallabyControl(Routing.ServerRoute):
+	def __init__(self):
+		self.actions_with_params = {"stop" : self.stop, "run" : self.run_program}
+		self.actions_without_params = {"restart" : self.restart, "disconnect" : self.disconnect, 
+		"reboot" : self.reboot, "shutdown" : self.shutdown}
+		self.programs = []
+
+
 	def run(self, data, handler):
-		if data == "list":
-			wallabies = []
+		for program in os.listdir(handler.routes[WALLABY_SYNC_ROUTE].folder):
+			if "botball_user_program" in os.listdir(handler.routes[WALLABY_SYNC_ROUTE].folder + program)
+				self.programs.append(program)
+		if data == "list_wallaby_controllers":
+			wallabies = {}
 			for wallaby_handler in handler.broadcast.channels[Handler.Channels.WALLABY]:
-				wallabies.append("%s:%d" % (wallaby_handler.sock.address, wallaby_handler.sock.port))
+				wallabies["%s:%d" % (wallaby_handler.sock.address, wallaby_handler.sock.port)] = wallaby_handler.name
 			handler.sock.send(wallabies, "wallaby_control")
+		elif data == "list_programs":
+			handler.sock.send({"programs" : self.programs})
 		elif type(data) is dict:
 			for wallaby_handler in handler.broadcast.channels[Handler.Channels.WALLABY]:
 				address_pair = "%s:%d" % (wallaby_handler.sock.address, wallaby_handler.sock.port)
 				if address_pair in data.keys():
-					if data[address_pair] in ("stop", "restart", "disconnect", "reboot", "shutdown"):
-						wallaby_handler.sock.send(data[address_pair], "wallaby_control")
+					if type(data[address_pair]) is list:
+						for action in data[address_pair]:
+							if action in self.actions_without_params.keys():
+								self.actions_without_params[action](wallaby_handler)
 					elif type(data[address_pair]) is dict:
-						if "run" in data[address_pair]:
-							Logging.warning("Remote binary execution not yet implemented. (file_sync and compile required)")
-					else:
-						Logging.warning("'%s:%d' has issued an invalid control command." % (handler.info[0], handler.info[1]))
-				return
+						for action in data[address_pair]:
+							if action in self.actions_with_params.keys():
+								self.actions_without_params[action](data[address_pair][action], wallaby_handler)
+					return
 			handler.sock.send("Wallaby not connected anymore.", "error_report")
 
 
-class SetType(Routing.ServerRoute):
-	def run(self, data, handler):
-		if data == "st":
-			handler.channel = Handler.Channels.SUBLIME
-			handler.broadcast.add(handler, handler.channel)
-		elif data == "w":
-			handler.channel = Handler.Channels.WALLABY
-			handler.broadcast.add(handler, handler.channel)
-		else:
-			handler.sock.close()
-			return
-		Logging.info("'%s:%d' has identified as a %s client." % (handler.info[0], handler.info[1], 
-			"Sublime Text" if handler.channel == Handler.Channels.SUBLIME else 
-			"Wallaby" if handler.channel == Handler.Channels.WALLABY else 
-			"Unknown (will not subscribe to broadcast)"))
+	def restart(self, wallaby_handler):
+		wallaby_handler.sock.send("restart")
+
+
+	def disconnect(self, wallaby_handler):
+		pass
+
+
+	def reboot(self, wallaby_handler):
+		wallaby_handler.sock.send("reboot")
+
+
+	def shutdown(self, wallaby_handler):
+		wallaby_handler.sock.send("shutdown")
+
+
+	def run_program(self, wallaby_handler, program):
+		wallaby_handler.sock.send({"run" : program})		
+
+
+	def stop(self, wallaby_handler, program):
+		pass
+
+
+class Compile(Routing.ServerRoute):
+	REQUIRED = [Routing.ROUTE]
+	HAS_MAIN = re.compile(r"\w*\s*main\(\)\s*(\{|.*)$")
+
+	@staticmethod
+	def is_valid_c_program(path):
+		for line in open(path, "r").read().split("\n"):
+			if Compile.HAS_MAIN.match(line):
+				return True
+		return False
+
+
+	def __init__(self, binary_path):
+		self.binary_path = os.path.abspath(binary_path) + "/"
+
+
+	def compile(self, path, relpath, handler=None):
+		if relpath.endswith(".c") and Compile.is_valid_c_program(path + relpath):
+			name = "-".join(relpath.split("/")).rstrip(".c")
+			full_path = self.binary_path + name
+			if not os.path.exists(full_path):
+				os.mkdir(full_path)
+			error = True
+			p = Popen(["gcc", "-o", "%s" % full_path + "/botball_user_program", path + relpath], stdout=PIPE, stderr=PIPE)
+			error = False if p.wait() == 0 else True
+			result = ""
+			for line in p.communicate():
+				result += line.decode()
+			if handler != None:
+				handler.sock.send({"failed" : error, "returned" : result, "relpath" : relpath}, self.route)
+
 
 
 class GetInfo(Routing.ServerRoute):
 	REQUIRED = [Routing.ROUTE]
 
+	SUBLIME_TEXT = "s"
+	WALLABY = "w"
+
 	def run(self, data, handler):
 		if "type" in data:
-			if data["type"] == "st":
+			if data["type"] == GetInfo.SUBLIME_TEXT:
 				handler.channel = Handler.Channels.SUBLIME
 				handler.broadcast.add(handler, handler.channel)
-			elif data["type"] == "w":
+			elif data["type"] == GetInfo.WALLABY:
 				handler.channel = Handler.Channels.WALLABY
 				handler.broadcast.add(handler, handler.channel)
 		if "name" in data:
@@ -91,10 +153,9 @@ class Handler(Server.Handler):
 		self.broadcast = broadcast
 		self.channel = None
 		self.routes = Routing.create_routes(routes, self)
-		self.start_time = time()
 		self.name = "Unknown"
 		for route in self.routes:
-			self.routes[route].start(self)		
+			self.routes[route].start(self)
 
 		
 	def handle(self, data, route):
@@ -144,13 +205,15 @@ for channel in Handler.Channels.__dict__:
 	if not channel.startswith("_"):
 		broadcast.add_channel(Handler.Channels.__dict__[channel])
 
+compile = Compile(config.binary_path)
+
 try:
 	Logging.header("fl0w server started on '%s:%d'" % (config.server_address[0], config.server_address[1]))
 	server.run(Handler, 
 		{"broadcast" : broadcast,
-		"routes" : {"info" : Info(), "wallaby_control" : WallabyControl(), "set_type" : SetType(), "get_info" : GetInfo(),
-		"w_sync" : SyncServer(config.binary_path, Handler.Channels.WALLABY, deleted_db_path="deleted-w.db"),
-		"s_sync" : SyncServer(config.source_path, Handler.Channels.SUBLIME, deleted_db_path="deleted-s.db")}})
+		"routes" : {"info" : Info(), "wallaby_control" : WallabyControl(), "get_info" : GetInfo(), "compile" : compile,
+		WALLABY_SYNC_ROUTE : SyncServer(config.binary_path, Handler.Channels.WALLABY, debug=config.debug, deleted_db_path="deleted-w.pickle"),
+		SUBLIME_SYNC_ROUTE : SyncServer(config.source_path, Handler.Channels.SUBLIME, debug=config.debug, deleted_db_path="deleted-s.pickle", modified_hook=compile.compile)}})
 except KeyboardInterrupt:
 	Logging.header("Gracefully shutting down server.")
 	server.stop()
