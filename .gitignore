@@ -10,3 +10,4 @@ Binaries
 Source
 deleted*.db*
 .fl0w
+*.pickle
