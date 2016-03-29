@@ -1,5 +1,8 @@
+import Logging
+
 BROADCAST = 0
 ROUTE = 1
+SOCK = 2
 
 class InvalidRouteSetup(AttributeError):
 	def __init__(self, msg):
@@ -7,9 +10,6 @@ class InvalidRouteSetup(AttributeError):
 
 class ServerRoute:
 	def __init__(self, **kwargs):
-		self.setup(**kwargs)
-
-	def setup(self, **kwargs):
 		pass
 
 	def run(self, data, handler):
