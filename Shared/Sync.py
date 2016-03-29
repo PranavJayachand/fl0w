@@ -3,9 +3,11 @@ import hashlib
 import time
 import base64
 import random
+import pickle
+import shutil
 
 import Routing
-import sqlite3
+import Logging
 
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -16,11 +18,6 @@ class File:
 		self.relpath = relpath
 		self.hash = hash
 		self.mtime = mtime
-
-
-	@property
-	def db_repr(self):
-		return [self.relpath, self.hash, self.mtime]
 
 
 	def __eq__(self, other):
@@ -34,14 +31,12 @@ class File:
 
 
 class DeletedStorage:
-	def __init__(self, db_path="deleted.db"):
-		self.db = sqlite3.connect(db_path)
-		self.cursor = self.db.cursor()
-		self.files = []
-		self.cursor.execute("create table if not exists files (file_id integer primary key autoincrement, relpath text, hash text, mtime integer)")
-		for row in self.cursor.execute("select * from files"):
-			self.files.append(File(row[1], row[2], row[3]))
-		self.cursor.execute("delete from files")
+	def __init__(self, storage_path="deleted_files.pickle"):
+		try:
+			self.files = pickle.load(open(storage_path, "rb"))
+		except (FileNotFoundError, EOFError):
+			self.files = []
+		self.storage_path = storage_path
 
 	def add(self, file):
 		if type(file) is File:
@@ -58,10 +53,10 @@ class DeletedStorage:
 			raise TypeError("only objects of type File can be removed")
 
 	def close(self):
-		for file in self.files:
-			self.cursor.execute("insert into files (relpath, hash, mtime) values (?, ?, ?)", file.db_repr)
-		self.db.commit()
-		self.db.close()
+		mode = "wb"
+		if not self.storage_path in os.listdir("."):
+			mode = "ab"
+		pickle.dump(self.files, open(self.storage_path, mode))
 
 
 def relative_recursive_ls(path, relative_to, exclude=[]):
@@ -75,6 +70,18 @@ def relative_recursive_ls(path, relative_to, exclude=[]):
 			else:
 				files.append(os.path.relpath(path + item, relative_to))
 	return files
+
+
+def relative_recursive_folder_ls(path, relative_to, exclude=[]):
+	if path[-1] != "/":
+		path += "/"
+	folders = []
+	for item in os.listdir(path):
+		if item not in exclude:
+			if os.path.isdir(path + item):
+				folders.append(os.path.relpath(path + item, relative_to))
+				folders += relative_recursive_folder_ls(path + item, relative_to, exclude)
+	return folders
 
 
 def md5(path):
@@ -102,33 +109,58 @@ class ReloadHandler(FileSystemEventHandler):
 	def __init__(self, sync):
 		self.sync = sync
 
+
 	def on_modified(self, event):
 		if get_name_from_path(event.src_path) not in self.sync.exclude and not event.is_directory:
+			if self.sync.debug:
+				Logging.info("Modified file: '%s'" % event.src_path)
 			self.sync.modified(event)
 
 
 	def on_created(self, event):
 		if get_name_from_path(event.src_path) not in self.sync.exclude and not event.is_directory:
+			if self.sync.debug:
+				Logging.info("Created file: '%s'" % event.src_path)
 			self.sync.created(event)
 
 
 	def on_deleted(self, event):
-		if get_name_from_path(event.src_path) not in self.sync.exclude and not event.is_directory:
-			self.sync.deleted(event)
+		if get_name_from_path(event.src_path) not in self.sync.exclude:
+			if not event.is_directory:
+				if self.sync.debug:
+					Logging.info("Deleted file: '%s'" % event.src_path)
+				self.sync.deleted(event)
+			else:
+				if self.sync.debug:
+					Logging.info("Deleted dir: '%s'" % event.src_path)
+				self.sync.deleted_dir(event)
+
+
+	def on_moved(self, event):
+		if get_name_from_path(event.src_path) not in self.sync.exclude: 
+			if not event.is_directory:
+				if self.sync.debug:
+					Logging.info("Moved file: '%s' -> '%s'" % (event.src_path, event.dest_path))
+				self.sync.moved(event)
+			else:
+				if self.sync.debug:
+					Logging.info("Moved dir: '%s' -> '%s'" % (event.src_path, event.dest_path))
+				self.sync.moved_dir(event)
 
 
 class SyncClient(Routing.ClientRoute):
-	def __init__(self, sock, folder, route, exclude=[".DS_Store", ".git", ".fl0w"]):
+	def __init__(self, sock, folder, route, exclude=[".DS_Store", ".fl0w"], debug=False):
 		self.sock = sock
 		self.folder = folder if folder[-1] == "/" else folder + "/"
 		self.started = False
 		self.route = route
 		self.exclude = exclude
+		self.debug = debug
 		self.files = relative_recursive_ls(folder, folder, exclude=self.exclude)
 		self.suppressed_fs_events = []
-		observer = Observer()
-		observer.schedule(ReloadHandler(self), path=self.folder, recursive=True)
-		observer.start()
+		self.observer = Observer()
+		self.observer.schedule(ReloadHandler(self), path=self.folder, recursive=True)
+		self.observer.start()
 
 
 	def start(self):
@@ -173,6 +205,24 @@ class SyncClient(Routing.ClientRoute):
 					except FileNotFoundError:
 						self.unsuppress_fs_event(file)
 						Logging.warning("Possible server misbehaviour")
+			elif "deldir" in data:
+				for dir in data["deldir"]:
+					if os.path.exists(self.folder + dir):
+						for folder in relative_recursive_folder_ls(self.folder + dir, self.folder):
+							self.suppress_fs_event(folder)
+						for file in relative_recursive_ls(self.folder + dir, self.folder):
+							self.suppress_fs_event(file)
+						self.suppress_fs_event(dir)
+						shutil.rmtree(self.folder + dir)
+					else:
+						Logging.warning("Possible server misbehaviour")
+			elif "mvd" in data:
+				for file in data["mvd"]:
+					if os.path.isfile(self.folder + file):
+						new_name = self.folder + data["mvd"][file]
+						if os.path.exists(os.path.dirname(new_name)):
+							self.suppress_fs_event(file)
+							shutil.move(self.folder + file, new_name)
 			elif "req" in data:
 				for file in data["req"]:
 					if file in self.files:
@@ -191,7 +241,6 @@ class SyncClient(Routing.ClientRoute):
 			self.unsuppress_fs_event(relpath)
 
 
-
 	def created(self, event):
 		self.modified(event)
 
@@ -206,17 +255,44 @@ class SyncClient(Routing.ClientRoute):
 			self.unsuppress_fs_event(relpath)
 
 
+	def deleted_dir(self, event):
+		relpath = os.path.relpath(event.src_path, self.folder)
+		if not relpath in self.suppressed_fs_events: 
+			self.sock.send({"deldir" : [relpath]}, self.route)
+		else:
+			self.unsuppress_fs_event(relpath)
+
+	def moved(self, event):
+		src_relpath = os.path.relpath(event.src_path, self.folder)
+		dest_relpath = os.path.relpath(event.dest_path, self.folder)
+		if src_relpath in self.files:
+			del self.files[self.files.index(src_relpath)]
+		self.files.append(dest_relpath)
+		if not src_relpath in self.suppressed_fs_events: 
+			self.sock.send({"mvd" : {src_relpath : dest_relpath}}, self.route)
+		else:
+			self.unsuppress_fs_event(src_relpath)
+
+
+	def moved_dir(self, event):
+		print(event)
+		print(dir(event))
+
+
 class SyncServer(Routing.ServerRoute):
 	REQUIRED = (Routing.BROADCAST, Routing.ROUTE)
 
-	def __init__(self, folder, channel, exclude=[".DS_Store", ".git", ".keep", ".fl0w"], deleted_db_path="deleted.db", modified_hook=None, deleted_hook=None):
+	def __init__(self, folder, channel, exclude=[".DS_Store", ".fl0w"], debug=False, deleted_db_path="deleted.db", modified_hook=None, deleted_hook=None):
 		self.folder = folder if folder[-1] == "/" else folder + "/"
 		self.channel = channel
 		self.exclude = exclude
+		self.debug = debug
 		self.deleted_storage = DeletedStorage(deleted_db_path)
 		self.modified_hook = modified_hook
 		self.deleted_hook = deleted_hook
 		self.broadcast_file_excludes = {}
+		self.broadcast_dir_excludes = {}
+		self.ignore_events = []
 		self.route = None # Set by REQUIRED
 		self.broadcast = None # Set by REQUIRED
 
@@ -255,6 +331,20 @@ class SyncServer(Routing.ServerRoute):
 					self.broadcast_file_excludes[file] = handler
 					open(self.folder + file, mode).write(base64.b64decode(data["add"][file]["content"]))
 					os.utime(self.folder + file, (data["add"][file]["mtime"], data["add"][file]["mtime"]))
+			elif "deldir" in data:
+				for dir in data["deldir"]:
+					if os.path.exists(self.folder + dir):
+						for folder in relative_recursive_folder_ls(self.folder + dir, self.folder):
+							self.ignore_events.append(folder)
+							print("excluding folder: %s" % folder)
+						for file in relative_recursive_ls(self.folder + dir, self.folder):
+							self.ignore_events.append(file)
+							if file in self.files:
+								del self.files[self.files.index(file)]
+						self.broadcast_dir_excludes[dir] = handler
+						shutil.rmtree(self.folder + dir)
+					else:
+						Logging.warning("Possible client misbehaviour (%s:%d)" % (handler.info[0], handler.info[1]))
 			elif "del" in data:
 				for file in data["del"]:
 					self.broadcast_file_excludes[file] = handler
@@ -264,6 +354,13 @@ class SyncServer(Routing.ServerRoute):
 					except FileNotFoundError:
 						del self.broadcast_file_excludes[file]
 						Logging.warning("Possible client misbehaviour (%s:%d)" % (handler.info[0], handler.info[1]))
+			elif "mvd" in data:
+				for file in data["mvd"]:
+					if os.path.isfile(self.folder + file):
+						new_name = self.folder + data["mvd"][file]
+						if os.path.exists(os.path.dirname(new_name)):
+							self.broadcast_file_excludes[file] = handler
+							shutil.move(self.folder + file, new_name)
 
 
 	def modified(self, event):
@@ -276,6 +373,8 @@ class SyncServer(Routing.ServerRoute):
 		self.broadcast.broadcast({"add" : {relpath : {
 			"content" : base64_str_decode(event.src_path), 
 			"mtime" : os.path.getmtime(event.src_path)}}}, self.route, self.channel, exclude=exclude)
+		if self.modified_hook != None:
+			self.modified_hook(self.folder, relpath, exclude[0] if len(exclude) == 1 else None)
 		if exclude != []:
 			del self.broadcast_file_excludes[relpath]
 
@@ -284,13 +383,54 @@ class SyncServer(Routing.ServerRoute):
 		self.modified(event)
 
 
+
 	def deleted(self, event):
 		relpath = os.path.relpath(event.src_path, self.folder)
-		if relpath in self.files:
-			del self.files[self.files.index(relpath)]
+		if not relpath in self.ignore_events: 
+			if relpath in self.files:
+				del self.files[self.files.index(relpath)]
+			exclude = []
+			if relpath in self.broadcast_file_excludes:
+				exclude.append(self.broadcast_file_excludes[relpath])
+			self.broadcast.broadcast({"del" : [relpath]}, self.route, self.channel, exclude=exclude)
+			if self.deleted_hook != None:
+				self.deleted_hook(self.folder, relpath, exclude[0] if len(exclude) == 1 else None)
+			if exclude != []:
+				del self.broadcast_file_excludes[relpath]
+		else:
+			del self.ignore_events[self.ignore_events.index(relpath)]
+
+
+	def deleted_dir(self, event):
+		relpath = os.path.relpath(event.src_path, self.folder)
+		if not relpath in self.ignore_events: 
+			exclude = []
+			if relpath in self.broadcast_dir_excludes:
+				exclude.append(self.broadcast_dir_excludes[relpath])
+			self.broadcast.broadcast({"deldir" : [relpath]}, self.route, self.channel, exclude=exclude)
+			if exclude != []:
+				del self.broadcast_dir_excludes[relpath]
+		else:
+			del self.ignore_events[self.ignore_events.index(relpath)]
+
+
+	def moved(self, event):
+		src_relpath = os.path.relpath(event.src_path, self.folder)
+		dest_relpath = os.path.relpath(event.dest_path, self.folder)
+		if src_relpath in self.files:
+			del self.files[self.files.index(src_relpath)]
+		self.files.append(dest_relpath)
 		exclude = []
-		if relpath in self.broadcast_file_excludes:
-			exclude.append(self.broadcast_file_excludes[relpath])
-		self.broadcast.broadcast({"del" : [relpath]}, self.route, self.channel, exclude=exclude)
+		if src_relpath in self.broadcast_file_excludes:
+			exclude.append(self.broadcast_file_excludes[src_relpath])
+		self.broadcast.broadcast({"mvd" : {src_relpath : dest_relpath}}, self.route, self.channel, exclude=exclude)
 		if exclude != []:
-			del self.broadcast_file_excludes[relpath]
+			del self.broadcast_file_excludes[src_relpath]
+
+
+	def moved_dir(self, event):
+		print(event)
+
+
+	def stop(self, handler):
+		self.deleted_storage.close()
