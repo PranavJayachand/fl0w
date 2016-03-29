@@ -641,7 +641,7 @@ class KqueueEmitter(EventEmitter):
                 self.queue_event(event)
             else:
                 self.queue_event(FileMovedEvent(src_path, dest_path))
-        except KeyError:
+        except KeyError, AttributeError:
             # If the new snapshot does not have an inode for the
             # old path, we haven't found the new name. Therefore,
             # we mark it as deleted and remove unregister the path.
