@@ -31,7 +31,8 @@ CHANNEL = "s"
 def plugin_unloaded():
 	for window in windows:
 		if hasattr(window, "fl0w"):
-			window.fl0w.invoke_disconnect()
+			if window.fl0w.connected:
+				window.fl0w.invoke_disconnect()
 
 
 
@@ -129,7 +130,6 @@ class Fl0w:
 				# Establish connection to the server
 				self.sock = ESock(socket.create_connection((connect_details[0], int(connect_details[1]))), disconnect_callback=self.invoke_disconnect, debug=False)
 				sublime.status_message("Connected to %s:%s." % (connect_details[0], connect_details[1]))
-				self.connected = True
 				# Initialize all routes
 				error_report = Fl0w.ErrorReport()
 				info = Fl0w.Info()
@@ -141,6 +141,7 @@ class Fl0w:
 					"info" : info, "wallaby_control" : wallaby_control, "get_info" : get_info, 
 					"s_sync" : self.s_sync, "compile" : compile}, self))
 				self.s_sync.start()
+				self.connected = True
 				# Saving last server address
 				sublime.load_settings("fl0w.sublime-setting").set("server_address", connect_details_raw)
 				sublime.save_settings("fl0w.sublime-setting")
@@ -159,23 +160,23 @@ class Fl0w:
 
 	def invoke_disconnect(self):
 		if self.connected:
-			sublime.message_dialog("Connection closed ('%s')" % ", ".join(self.folder))
-		if hasattr(self, "s_sync"):
+			self.connected = False
+			sublime.message_dialog("Connection closed ('%s')" % self.folder)
 			self.s_sync.observer.stop()
-		self.connected = False
-		self.sock.close()
+			self.sock.close()
+		
 
 
 	def invoke_wallaby_control(self):
-		self.sock.send("list", "wallaby_control")
+		self.sock.send("list_wallaby_controllers", "wallaby_control")
 
 
 	class WallabyControl(Routing.ClientRoute):
 		def run(self, data, handler):
 			wallaby_menu = Menu()
 			entry_count = 0
-			for wallaby in data:
-				wallaby_menu.add(Entry(wallaby, str(data[wallaby]), action=handler.wallaby_control_submenu, kwargs={"wallaby" : wallaby}))
+			for wallaby in data["wallaby_controllers"]:
+				wallaby_menu.add(Entry(wallaby, str(data["wallaby_controllers"][wallaby]), action=handler.wallaby_control_submenu, kwargs={"wallaby" : wallaby}))
 				entry_count += 1
 			if entry_count != 0:
 				wallaby_menu.invoke(handler.window, back=handler.main_menu)
@@ -185,10 +186,9 @@ class Fl0w:
 
 	def wallaby_control_submenu(self, wallaby):
 		menu = Menu(subtitles=False)
-		for action in ("Run", "Stop"):
-			menu.add(Entry(action, action=self.sock.send, kwargs={"data" : {wallaby : action.lower()}, "route" : "wallaby_control"}))
-		for action in ("Restart", "Shutdown", "Reboot", "Disconnect"):
-			menu.add(Entry(action, action=self.sock.send, kwargs={"data" : {wallaby : action.lower()}, "route" : "wallaby_control"}))
+		menu.add(Entry("Run"))
+		for action in ("Stop", "Restart", "Shutdown", "Reboot", "Disconnect"):
+			menu.add(Entry(action, action=self.sock.send, kwargs={"data" : {wallaby : [action.lower()]}, "route" : "wallaby_control"}))
 		
 
 		menu.invoke(self.window)
@@ -208,6 +208,7 @@ class Fl0w:
 
 class Fl0wCommand(sublime_plugin.WindowCommand):
 	def run(self): 
+		print(windows)
 		valid_window_setup = True
 		folder_count = len(self.window.folders())
 		if folder_count > 1:
@@ -238,6 +239,7 @@ class Fl0wCommand(sublime_plugin.WindowCommand):
 				else:
 					sublime.error_message("fl0w can't be opened in your current directory (.no-fl0w file exists)")		
 			else:
+				print(self.window.fl0w.connected)
 				if not self.window.fl0w.connected:
 					self.window.fl0w.start_menu.invoke(self.window)
 				else:
@@ -248,11 +250,6 @@ class Fl0wCommand(sublime_plugin.WindowCommand):
 				if self.window.fl0w.connected:
 					self.window.fl0w.invoke_disconnect()
 
-	def description(self):
-		print("description accessed")
-		if hasattr(self.windows, "fl0w"):
-			return "Connected."
-		return None
 
 
 windows = []
