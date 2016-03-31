@@ -5,6 +5,7 @@ import base64
 import random
 import pickle
 import shutil
+import _thread
 
 import Routing
 import Logging
@@ -112,45 +113,70 @@ class ReloadHandler(FileSystemEventHandler):
 
 	def on_modified(self, event):
 		if get_name_from_path(event.src_path) not in self.sync.exclude and not event.is_directory:
-			if self.sync.debug:
-				Logging.info("Modified file: '%s'" % event.src_path)
-			self.sync.modified(event)
+			self.sync.action_queue.add(Action(self.sync.modified, {"event" : event}))
 
 
 	def on_created(self, event):
 		if get_name_from_path(event.src_path) not in self.sync.exclude and not event.is_directory:
-			if self.sync.debug:
-				Logging.info("Created file: '%s'" % event.src_path)
-			self.sync.created(event)
+			self.sync.action_queue.add(Action(self.sync.created, {"event" : event}))
 
 
 	def on_deleted(self, event):
 		if get_name_from_path(event.src_path) not in self.sync.exclude:
 			if not event.is_directory:
-				if self.sync.debug:
-					Logging.info("Deleted file: '%s'" % event.src_path)
-				self.sync.deleted(event)
+				print("deleted")
+				self.sync.action_queue.add(Action(self.sync.deleted, {"event" : event}))
 			else:
-				if self.sync.debug:
-					Logging.info("Deleted dir: '%s'" % event.src_path)
-				self.sync.deleted_dir(event)
+				self.sync.action_queue.add(Action(self.sync.deleted_dir, {"event" : event}))
 
 
 	def on_moved(self, event):
 		if get_name_from_path(event.src_path) not in self.sync.exclude: 
 			if not event.is_directory:
-				if self.sync.debug:
-					Logging.info("Moved file: '%s' -> '%s'" % (event.src_path, event.dest_path))
-				self.sync.moved(event)
+				self.sync.action_queue.add(Action(self.sync.moved, {"event" : event}))
 			else:
-				if self.sync.debug:
-					Logging.info("Moved dir: '%s' -> '%s'" % (event.src_path, event.dest_path))
-				self.sync.moved_dir(event)
+				self.sync.action_queue.add(Action(self.sync.moved_dir, {"event" : event}))
+
+
+class ActionQueue:
+	def __init__(self):
+		self.actions = []
+		self.running = False
+
+	def add(self, action):
+		if type(action) is Action:
+			self.actions.append(action)
+			self.start()
+
+	def start(self):
+		while self.running:
+			time.sleep(0.01)
+		_thread.start_new_thread(self.run, ())
+
+	def run(self):
+		self.actions[0].run()
+		del self.actions[0]
+		self.running = False
+
+
+class Action:
+	def __init__(self, function, kwargs):
+		self.function = function
+		self.kwargs = kwargs
+
+	def run(self):
+		self.function(**self.kwargs)
+
+	def __eq__(self, other):
+		if type(other) is Action:
+			return self.__dict__ == other.__dict__
+		return False
 
 
 class SyncClient(Routing.ClientRoute):
 	def __init__(self, sock, folder, route, exclude=[".DS_Store", ".fl0w"], debug=False):
 		self.sock = sock
+		self.action_queue = ActionQueue()
 		self.folder = folder if folder[-1] == "/" else folder + "/"
 		self.started = False
 		self.route = route
@@ -164,6 +190,8 @@ class SyncClient(Routing.ClientRoute):
 
 
 	def start(self):
+		if self.debug:
+			Logging.info("Sync client started!")
 		out = {"list" : {}}
 		for file in self.files:
 			out["list"].update({file : {"mtime" : get_mtime(self.folder + file), 
@@ -230,7 +258,9 @@ class SyncClient(Routing.ClientRoute):
 							"mtime" : os.path.getmtime(self.folder + file)}}}, self.route)
 
 
-	def modified(self, event):
+	def modified(self, event, created=False):
+		if self.debug and not created:
+			Logging.info("Modified file: '%s'" % event.src_path)		
 		relpath = os.path.relpath(event.src_path, self.folder)
 		if relpath not in self.files:
 			self.files.append(relpath)
@@ -242,20 +272,27 @@ class SyncClient(Routing.ClientRoute):
 
 
 	def created(self, event):
-		self.modified(event)
+		if self.debug:
+			Logging.info("Created file: '%s'" % event.src_path)
+		self.modified(event, created=True)
 
 
 	def deleted(self, event):
+		if self.debug:
+			Logging.info("Deleted file: '%s'" % event.src_path)
 		relpath = os.path.relpath(event.src_path, self.folder)
 		if relpath in self.files:
 			del self.files[self.files.index(relpath)]
 		if not relpath in self.suppressed_fs_events: 
-			self.sock.send({"del" : [relpath]}, self.route)
+			pass
+			#self.sock.send({"del" : [relpath]}, self.route)
 		else:
 			self.unsuppress_fs_event(relpath)
 
 
 	def deleted_dir(self, event):
+		if self.debug:
+			Logging.info("Deleted folder: '%s'" % event.src_path)
 		relpath = os.path.relpath(event.src_path, self.folder)
 		if not relpath in self.suppressed_fs_events: 
 			self.sock.send({"deldir" : [relpath]}, self.route)
@@ -263,6 +300,8 @@ class SyncClient(Routing.ClientRoute):
 			self.unsuppress_fs_event(relpath)
 
 	def moved(self, event):
+		if self.debug:
+			Logging.info("Moved file: '%s'" % event.src_path)
 		src_relpath = os.path.relpath(event.src_path, self.folder)
 		dest_relpath = os.path.relpath(event.dest_path, self.folder)
 		if src_relpath in self.files:
@@ -284,6 +323,7 @@ class SyncServer(Routing.ServerRoute):
 
 	def __init__(self, folder, channel, exclude=[".DS_Store", ".fl0w"], debug=False, deleted_db_path="deleted.db", modified_hook=None, deleted_hook=None):
 		self.folder = folder if folder[-1] == "/" else folder + "/"
+		self.action_queue = ActionQueue()
 		self.channel = channel
 		self.exclude = exclude
 		self.debug = debug
@@ -298,6 +338,8 @@ class SyncServer(Routing.ServerRoute):
 
 
 	def start(self, handler):
+		if self.debug:
+			Logging.info("Sync server on route '%s' started!" % self.route)		
 		self.files = relative_recursive_ls(self.folder, self.folder, exclude=self.exclude)
 		observer = Observer()
 		observer.schedule(ReloadHandler(self), path=self.folder, recursive=True)
@@ -363,7 +405,10 @@ class SyncServer(Routing.ServerRoute):
 							shutil.move(self.folder + file, new_name)
 
 
-	def modified(self, event):
+	def modified(self, event, created=False):
+		if self.debug and not created:
+			Logging.info("Modified file: '%s'" % event.src_path)
+		print(self.broadcast_file_excludes)
 		relpath = os.path.relpath(event.src_path, self.folder)
 		if relpath not in self.files:
 			self.files.append(relpath)
@@ -380,11 +425,17 @@ class SyncServer(Routing.ServerRoute):
 
 
 	def created(self, event):
-		self.modified(event)
+		if self.debug:
+			Logging.info("Created file: '%s'" % event.src_path)
+		print(self.broadcast_file_excludes)
+		self.modified(event, created=True)
 
 
 
 	def deleted(self, event):
+		if self.debug:
+			Logging.info("Deleted file: '%s'" % event.src_path)
+		print(self.broadcast_file_excludes)
 		relpath = os.path.relpath(event.src_path, self.folder)
 		if not relpath in self.ignore_events: 
 			if relpath in self.files:
@@ -402,6 +453,8 @@ class SyncServer(Routing.ServerRoute):
 
 
 	def deleted_dir(self, event):
+		if self.debug:
+			Logging.info("Deleted folder: '%s'" % event.src_path)
 		relpath = os.path.relpath(event.src_path, self.folder)
 		if not relpath in self.ignore_events: 
 			exclude = []
@@ -415,6 +468,8 @@ class SyncServer(Routing.ServerRoute):
 
 
 	def moved(self, event):
+		if self.debug:
+			Logging.info("Moved file: '%s'" % event.src_path)
 		src_relpath = os.path.relpath(event.src_path, self.folder)
 		dest_relpath = os.path.relpath(event.dest_path, self.folder)
 		if src_relpath in self.files:
