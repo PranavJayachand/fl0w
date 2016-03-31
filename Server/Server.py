@@ -28,21 +28,23 @@ class Info(Routing.ServerRoute):
 
 class WallabyControl(Routing.ServerRoute):
 	def __init__(self):
-		self.actions_with_params = {"stop" : self.stop, "run" : self.run_program}
+		self.actions_with_params = {"run" : self.run_program}
 		self.actions_without_params = {"restart" : self.restart, "disconnect" : self.disconnect, 
-		"reboot" : self.reboot, "shutdown" : self.shutdown}
+		"reboot" : self.reboot, "shutdown" : self.shutdown, "stop" : self.stop_programs}
 		self.programs = []
 
 
 	def run(self, data, handler):
+		self.programs = []
 		for program in os.listdir(handler.routes[WALLABY_SYNC_ROUTE].folder):
-			if "botball_user_program" in os.listdir(handler.routes[WALLABY_SYNC_ROUTE].folder + program)
-				self.programs.append(program)
+			if os.path.isdir(handler.routes[WALLABY_SYNC_ROUTE].folder + program):
+				if "botball_user_program" in os.listdir(handler.routes[WALLABY_SYNC_ROUTE].folder + program):
+					self.programs.append(program)
 		if data == "list_wallaby_controllers":
-			wallabies = {}
+			wallaby_controllers = {}
 			for wallaby_handler in handler.broadcast.channels[Handler.Channels.WALLABY]:
-				wallabies["%s:%d" % (wallaby_handler.sock.address, wallaby_handler.sock.port)] = wallaby_handler.name
-			handler.sock.send(wallabies, "wallaby_control")
+				wallaby_controllers["%s:%d" % (wallaby_handler.sock.address, wallaby_handler.sock.port)] = wallaby_handler.name
+			handler.sock.send({"wallaby_controllers" : wallaby_controllers}, "wallaby_control")
 		elif data == "list_programs":
 			handler.sock.send({"programs" : self.programs})
 		elif type(data) is dict:
@@ -62,7 +64,7 @@ class WallabyControl(Routing.ServerRoute):
 
 
 	def restart(self, wallaby_handler):
-		wallaby_handler.sock.send("restart")
+		wallaby_handler.sock.send("restart", "wallaby_control")
 
 
 	def disconnect(self, wallaby_handler):
@@ -70,19 +72,19 @@ class WallabyControl(Routing.ServerRoute):
 
 
 	def reboot(self, wallaby_handler):
-		wallaby_handler.sock.send("reboot")
+		wallaby_handler.sock.send("reboot", "wallaby_control")
 
 
 	def shutdown(self, wallaby_handler):
-		wallaby_handler.sock.send("shutdown")
+		wallaby_handler.sock.send("shutdown", "wallaby_control")
 
 
 	def run_program(self, wallaby_handler, program):
-		wallaby_handler.sock.send({"run" : program})		
+		wallaby_handler.sock.send({"run" : program}, "wallaby_control")		
 
 
-	def stop(self, wallaby_handler, program):
-		pass
+	def stop_programs(self, wallaby_handler):
+		wallaby_handler.sock.send("stop", "wallaby_control")
 
 
 class Compile(Routing.ServerRoute):
@@ -133,7 +135,7 @@ class GetInfo(Routing.ServerRoute):
 				handler.channel = Handler.Channels.WALLABY
 				handler.broadcast.add(handler, handler.channel)
 		if "name" in data:
-			handler.sock.name = data["name"]
+			handler.name = data["name"]
 		Logging.info("'%s:%d' has identified as a %s client." % (handler.info[0], handler.info[1], 
 			"Sublime Text" if handler.channel == Handler.Channels.SUBLIME else 
 			"Wallaby" if handler.channel == Handler.Channels.WALLABY else 
@@ -171,6 +173,9 @@ class Handler(Server.Handler):
 		for route in self.routes:
 			self.routes[route].stop(self)
 		Logging.info("'%s:%d' disconnected." % (self.sock.address, self.sock.port))
+
+	def __repr__(self):
+		return "%s: %s:%d" % (self.name, self.sock.address, self.sock.port)
 
 
 def folder_validator(folder):
