@@ -13,7 +13,11 @@ import _thread
 class Server:
 	def __init__(self, host_port_pair, debug=False):
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		self.sock.bind(host_port_pair)
+		try:
+			self.sock.bind(host_port_pair)
+		except OSError:
+			Logging.error("Port currently in use. Exiting...")
+			exit(1)
 		self.sock.listen(2)
 		self.handlers = []
 		self.debug = debug
@@ -55,7 +59,7 @@ class Server:
 		try:
 			handler.finish()
 		except Exception:
-			self.print_trace(handler, sock)
+			self.print_trace(sock)
 		finally:		
 			if handler in self.handlers:
 				del self.handlers[self.handlers.index(handler)]
