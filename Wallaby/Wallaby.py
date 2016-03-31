@@ -1,6 +1,9 @@
 from ESock import ESock
 from Sync import SyncClient
+from Utils import is_socket_related_error
+from Utils import capture_trace
 import Routing
+import Logging
 
 import socket
 import time
@@ -10,27 +13,38 @@ import platform
 
 CHANNEL = "w"
 IS_WALLABY = True if "ARMv7" in platform.uname().version.lower() else False
+PATH = "/home/root/Documents/KISS/" if IS_WALLABY else sys.argv[1]
 
 class WallabyControl(Routing.ClientRoute):
 	def __init__(self):
-		self.actions_with_params = {"stop" : self.stop, "run" : self.run}
+		self.actions_with_params = {"run" : self.run_program}
 		self.actions_without_params = {"restart" : self.restart, "disconnect" : self.disconnect, 
-		"reboot" : self.reboot, "shutdown" : self.shutdown}
+		"reboot" : self.reboot, "shutdown" : self.shutdown, "stop" : self.stop}
 
 	def run(self, data, handler):
-		if data in self.actions_without_params.keys():
-			self.actions_without_params[action](handler)
+		if type(data) is str:
+			if data in self.actions_without_params.keys():
+				self.actions_without_params[data](handler)
 		elif type(data[address_pair]) is dict:
 			if action in self.actions_with_params.keys():
-				self.actions_without_params[action](data[action], handler)
+				self.actions_without_params[action](handler, data[action])
+
 
 	def stop(self, handler):
+		Logging.info("Stopping all processes with executable named botball_user_program.")
 		os.system("killall -s 2 botball_user_program")
 
+
+	def run_program(self, handler, program):
+		# WIP: Subprocess with unbuffered stdout required for output streaming
+		print(handler)
+		print(program)
+		os.system("./%s%s" % (handler.sync.folder, program))
+
+
 	def restart(self, handler):
-		self.disconnect(handler)
-		time.sleep(15)
-		os.execl(sys.executable, *([sys.executable]+sys.argv))
+		Logging.warning("Restart not implemented yet.")
+		
 
 	def reboot(self, handler):
 		os.system("reboot")
@@ -70,9 +84,11 @@ class WallabyClient:
 			data = self.sock.recv()
 			try:
 				if data[1] in self.routes:
-				self.routes[data[1]].run(data[0], self)
+					self.routes[data[1]].run(data[0], self)
 			except Exception as e:
-
+				if not is_socket_related_error(e):
+					capture_trace()
+				break
 
 
 	def stop(self):
