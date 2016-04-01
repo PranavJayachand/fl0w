@@ -113,70 +113,34 @@ class ReloadHandler(FileSystemEventHandler):
 
 	def on_modified(self, event):
 		if get_name_from_path(event.src_path) not in self.sync.exclude and not event.is_directory:
-			self.sync.action_queue.add(Action(self.sync.modified, {"event" : event}))
+			self.sync.modified(event)
 
 
 	def on_created(self, event):
 		if get_name_from_path(event.src_path) not in self.sync.exclude and not event.is_directory:
-			self.sync.action_queue.add(Action(self.sync.created, {"event" : event}))
+			self.sync.created(event)
 
 
 	def on_deleted(self, event):
 		if get_name_from_path(event.src_path) not in self.sync.exclude:
 			if not event.is_directory:
-				print("deleted")
-				self.sync.action_queue.add(Action(self.sync.deleted, {"event" : event}))
+				self.sync.deleted(event)
 			else:
-				self.sync.action_queue.add(Action(self.sync.deleted_dir, {"event" : event}))
+				self.sync.deleted_dir(event)
 
 
 	def on_moved(self, event):
 		if get_name_from_path(event.src_path) not in self.sync.exclude: 
 			if not event.is_directory:
-				self.sync.action_queue.add(Action(self.sync.moved, {"event" : event}))
+				self.sync.moved(event)
 			else:
-				self.sync.action_queue.add(Action(self.sync.moved_dir, {"event" : event}))
+				self.sync.moved_dir(event)
 
-
-class ActionQueue:
-	def __init__(self):
-		self.actions = []
-		self.running = False
-
-	def add(self, action):
-		if type(action) is Action:
-			self.actions.append(action)
-			self.start()
-
-	def start(self):
-		while self.running:
-			time.sleep(0.01)
-		_thread.start_new_thread(self.run, ())
-
-	def run(self):
-		self.actions[0].run()
-		del self.actions[0]
-		self.running = False
-
-
-class Action:
-	def __init__(self, function, kwargs):
-		self.function = function
-		self.kwargs = kwargs
-
-	def run(self):
-		self.function(**self.kwargs)
-
-	def __eq__(self, other):
-		if type(other) is Action:
-			return self.__dict__ == other.__dict__
-		return False
 
 
 class SyncClient(Routing.ClientRoute):
 	def __init__(self, sock, folder, route, exclude=[".DS_Store", ".fl0w"], debug=False):
 		self.sock = sock
-		self.action_queue = ActionQueue()
 		self.folder = folder if folder[-1] == "/" else folder + "/"
 		self.started = False
 		self.route = route
@@ -323,7 +287,6 @@ class SyncServer(Routing.ServerRoute):
 
 	def __init__(self, folder, channel, exclude=[".DS_Store", ".fl0w"], debug=False, deleted_db_path="deleted.db", modified_hook=None, deleted_hook=None):
 		self.folder = folder if folder[-1] == "/" else folder + "/"
-		self.action_queue = ActionQueue()
 		self.channel = channel
 		self.exclude = exclude
 		self.debug = debug
