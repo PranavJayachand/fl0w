@@ -4,6 +4,8 @@ import struct
 import DataTypes
 import Logging
 
+MAX_ROUTE_LENGTH = 16
+
 class ConvertFailedError(ValueError):
 	def __init__(self):
 		super(ValueError, self).__init__("conversion failed (false data type supplied)")
@@ -76,7 +78,10 @@ class ESock:
 			self._sock.close()
 			return None, ""
 		if self.debug:
-			Logging.info("Received %d-long '%s' on route '%s': %s (%s:%d)" % (len(data), type(data).__name__, route, str(data).replace("\n", " "), self.address, self.port))
+			data_repr = str(data).replace("\n", " ")
+			if len(data_repr) > 80:
+				data_repr = data_repr[:80] + "..."
+			Logging.info("Received %d-long '%s' on route '%s': %s (%s:%d)" % (len(data), type(data).__name__, route, data_repr, self.address, self.port))
 		return data, route
 
 
@@ -84,7 +89,10 @@ class ESock:
 		length = len(data)
 		original_data_type = type(data)
 		if self.debug:
-			Logging.info("Sending %d-long '%s' on route '%s': %s (%s:%d)" % (length, original_data_type.__name__, route, str(data).replace("\n", " "), self.address, self.port))		
+			data_repr = str(data).replace("\n", " ")
+			if len(data_repr) > 80:
+				data_repr = data_repr[:80] + "..."
+			Logging.info("Sending %d-long '%s' on route '%s': %s (%s:%d)" % (length, original_data_type.__name__, route, data_repr, self.address, self.port))		
 		route = route.encode()
 		if original_data_type in ESock.DATA_TYPES:
 			data_type = ESock.DATA_TYPES[original_data_type]
