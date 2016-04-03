@@ -65,6 +65,9 @@ class Fl0w:
 		self.connected = False
 		self.window = window
 		self.folder = window.folders()[0]
+		self.selected_wallaby = None
+		self.sock = None
+		self.s_sync = None
 
 		self.start_menu = Menu()
 		self.start_menu.add(Entry("Connect", "Connect to a fl0w server", action=self.invoke_connect))
@@ -117,9 +120,38 @@ class Fl0w:
 			view.settings().set("gutter", False)
 			view.settings().set("line_numbers", False)
 			view.set_read_only(False)
-			view.run_command("append", {"characters": data["returned"] + status})
+			view.run_command("append", {"characters": data["returned"] + status, "scroll_to_end" : True})
 			view.set_read_only(True)
 			handler.window.run_command("show_panel", {"panel": "output.compile_panel"})
+
+	class StdStream(Routing.ClientRoute):
+		def __init__(self):
+			self.view = None
+			self.buffer = ""
+
+		def setup_view(self, handler):
+			self.view = handler.window.create_output_panel('std_stream_panel')
+			self.view.settings().set("draw_white_space", "none")
+			self.view.settings().set("draw_indent_guides", False)
+			self.view.settings().set("gutter", False)
+			self.view.settings().set("line_numbers", False)			
+
+		def run(self, data, handler):
+			self.setup_view(handler)
+			handler.window.run_command("show_panel", {"panel": "output.std_stream_panel"})
+			if type(data) is str:
+				self.buffer += data
+				self.append_to_view(self.buffer)
+			elif type(data) is dict:
+				if "return_code" in data:
+					self.append_to_view(self.buffer + "\nProgram finished with return code %d" % data["return_code"])
+					self.buffer = ""
+
+		def append_to_view(self, text):
+			self.view.set_read_only(False)
+			self.view.run_command("append", {"characters" : text, "scroll_to_end" : True})
+			self.view.set_read_only(True)
+
 
 
 	def connect(self, connect_details):
@@ -135,11 +167,12 @@ class Fl0w:
 				info = Fl0w.Info()
 				wallaby_control = Fl0w.WallabyControl()
 				get_info = Fl0w.GetInfo()
+				std_stream = Fl0w.StdStream()
 				self.s_sync = SyncClient(self.sock, self.folder, "s_sync")
 				compile = Fl0w.Compile()
 				_thread.start_new_thread(sock_handler, (self.sock, {"error_report": error_report, 
 					"info" : info, "wallaby_control" : wallaby_control, "get_info" : get_info, 
-					"s_sync" : self.s_sync, "compile" : compile}, self))
+					"s_sync" : self.s_sync, "compile" : compile, "std_stream" : std_stream}, self))
 				self.s_sync.start()
 				self.connected = True
 				# Saving last server address
@@ -166,31 +199,48 @@ class Fl0w:
 			self.sock.close()
 		
 
-
 	def invoke_wallaby_control(self):
 		self.sock.send("list_wallaby_controllers", "wallaby_control")
 
 
+	def invoke_run_menu(self):
+		self.sock.send("list_programs", "wallaby_control")		
+
+
 	class WallabyControl(Routing.ClientRoute):
 		def run(self, data, handler):
-			wallaby_menu = Menu()
-			entry_count = 0
-			for wallaby in data["wallaby_controllers"]:
-				wallaby_menu.add(Entry(wallaby, str(data["wallaby_controllers"][wallaby]), action=handler.wallaby_control_submenu, kwargs={"wallaby" : wallaby}))
-				entry_count += 1
-			if entry_count != 0:
-				wallaby_menu.invoke(handler.window, back=handler.main_menu)
-			else:
-				sublime.error_message("No Wallaby Controllers connected.")
+			if "wallaby_controllers" in data:
+				wallaby_menu = Menu()
+				entry_count = 0
+				for wallaby in data["wallaby_controllers"]:
+					wallaby_menu.add(Entry(wallaby, str(data["wallaby_controllers"][wallaby]), action=handler.wallaby_control_submenu, kwargs={"wallaby" : wallaby}))
+					entry_count += 1
+				if entry_count != 0:
+					wallaby_menu.invoke(handler.window, back=handler.main_menu)
+				else:
+					sublime.error_message("No Wallaby Controllers connected.")
+			elif "programs" in data:
+				run_menu = Menu(subtitles=False)
+				entry_count = 0
+				for program in data["programs"]:
+					run_menu.add(Entry(program, action=handler.run_program, kwargs={"program" : program}))
+					entry_count += 1
+				if entry_count != 0:
+					run_menu.invoke(handler.window, back=handler.main_menu)
+				else:
+					sublime.error_message("No programs avaliable.")				
+
+	def run_program(self, program):
+		self.sock.send({self.selected_wallaby : {"run" : program}}, "wallaby_control")
 
 
 	def wallaby_control_submenu(self, wallaby):
+		self.selected_wallaby = wallaby
 		menu = Menu(subtitles=False)
-		menu.add(Entry("Run"))
+
+		menu.add(Entry("Run", action=self.invoke_run_menu))
 		for action in ("Stop", "Restart", "Shutdown", "Reboot", "Disconnect"):
 			menu.add(Entry(action, action=self.sock.send, kwargs={"data" : {wallaby : [action.lower()]}, "route" : "wallaby_control"}))
-		
-
 		menu.invoke(self.window)
 
 
@@ -204,11 +254,12 @@ class Fl0w:
 	def set_debug(self, debug):
 		sublime.status_message("fl0w: Debug now '%s'" % debug)
 		self.sock.debug = debug
+		sublime.load_settings("fl0w.sublime-setting").set("debug", debug)
+		sublime.save_settings("fl0w.sublime-setting")
 
 
 class Fl0wCommand(sublime_plugin.WindowCommand):
 	def run(self): 
-		print(windows)
 		valid_window_setup = True
 		folder_count = len(self.window.folders())
 		if folder_count > 1:
@@ -239,7 +290,6 @@ class Fl0wCommand(sublime_plugin.WindowCommand):
 				else:
 					sublime.error_message("fl0w can't be opened in your current directory (.no-fl0w file exists)")		
 			else:
-				print(self.window.fl0w.connected)
 				if not self.window.fl0w.connected:
 					self.window.fl0w.start_menu.invoke(self.window)
 				else:
