@@ -1,5 +1,5 @@
 **Project Lead:**  
-Philip Trauner [philip.trauner@aol.com](mailto:philip.trauner@aol.com) [philip-trauner.me](philip-trauner.me)
+[Philip Trauner](http://github.com/PhilipTrauner) [philip.trauner@aol.com](mailto:philip.trauner@aol.com) [philip-trauner.me](http://philip-trauner.me)
 
 fl0w includes open source libraries or adapted code from the following projects:  
 
