@@ -2,6 +2,7 @@ from ESock import ESock
 from Sync import SyncClient
 from Utils import is_socket_related_error
 from Utils import capture_trace
+from Utils import is_wallaby
 import Routing
 import Logging
 
@@ -10,9 +11,10 @@ import time
 import os
 import sys
 import platform
+import subprocess
 
 CHANNEL = "w"
-IS_WALLABY = True if "ARMv7" in platform.uname().version.lower() else False
+IS_WALLABY = is_wallaby()
 PATH = "/home/root/Documents/KISS/" if IS_WALLABY else sys.argv[1]
 
 class WallabyControl(Routing.ClientRoute):
@@ -25,21 +27,33 @@ class WallabyControl(Routing.ClientRoute):
 		if type(data) is str:
 			if data in self.actions_without_params.keys():
 				self.actions_without_params[data](handler)
-		elif type(data[address_pair]) is dict:
-			if action in self.actions_with_params.keys():
-				self.actions_without_params[action](handler, data[action])
+		elif type(data) is dict:
+			for action in data:
+				print(action)
+				if action in self.actions_with_params.keys():
+					self.actions_with_params[action](handler, data[action])
+
+
+	def run_program(self, handler, program):
+		if not IS_WALLABY:
+			command = ["gstdbuf", "-i0", "-o0", "-e0"]
+		else:
+			command = ["stdbuf", "-i0", "-o0", "-e0"]
+		command.append("./%s%s/botball_user_program" % (handler.sync.folder, program))
+		process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+		# Poll process for new output until finished
+		for line in iter(process.stdout.readline, b""):
+			handler.sock.send(line.decode(), "std_stream")
+			print(line)
+
+		process.wait()
+		handler.sock.send({"return_code" : process.returncode}, "std_stream")
 
 
 	def stop(self, handler):
 		Logging.info("Stopping all processes with executable named botball_user_program.")
 		os.system("killall -s 2 botball_user_program")
-
-
-	def run_program(self, handler, program):
-		# WIP: Subprocess with unbuffered stdout required for output streaming
-		print(handler)
-		print(program)
-		os.system("./%s%s" % (handler.sync.folder, program))
 
 
 	def restart(self, handler):
@@ -57,10 +71,14 @@ class WallabyControl(Routing.ClientRoute):
 		handler.sock.close()
 
 
+def get_wallaby_hostname():
+	return open("/etc/hostname", "r").read()
+
 class GetInfo(Routing.ClientRoute):
 	def run(self, data, handler):
 		if data == "":
-			handler.sock.send({"type" : CHANNEL, "name" : platform.node()}, "get_info")
+			handler.sock.send({"type" : CHANNEL, 
+				"name" : platform.node() if not IS_WALLABY else get_wallaby_hostname()}, "get_info")
 		elif "name" in data:
 			if IS_WALLABY:
 				open("/etc/hostname", "w").write(str(data["name"]))
