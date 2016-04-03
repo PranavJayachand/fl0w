@@ -60,6 +60,7 @@ class DeletedStorage:
 		pickle.dump(self.files, open(self.storage_path, mode))
 
 
+
 def relative_recursive_ls(path, relative_to, exclude=[]):
 	if path[-1] != "/":
 		path += "/"
@@ -177,6 +178,15 @@ class SyncClient(Routing.ClientRoute):
 		if type(data) is dict:
 			if "add" in data:
 				for file in data["add"]:
+					self.suppress_fs_event(file)
+					folder_path = self.folder + os.path.dirname(file)
+					if not os.path.exists(folder_path):
+						os.makedirs(folder_path)
+					mode = "wb+" if os.path.exists(self.folder + file) else "ab+"
+					open(self.folder + file, mode).write(base64.b64decode(data["add"][file]["content"]))
+					os.utime(self.folder + file, (data["add"][file]["mtime"], data["add"][file]["mtime"]))
+				"""
+				for file in data["add"]:
 					if not file in self.suppressed_fs_events:
 						self.suppress_fs_event(file)
 						folder_path = self.folder + os.path.dirname(file)
@@ -189,6 +199,7 @@ class SyncClient(Routing.ClientRoute):
 						os.utime(self.folder + file, (data["add"][file]["mtime"], data["add"][file]["mtime"]))
 					else:
 						self.unsuppress_fs_event(file)
+				"""
 			elif "del" in data:
 				for file in data["del"]:
 					self.suppress_fs_event(file)
@@ -248,8 +259,7 @@ class SyncClient(Routing.ClientRoute):
 		if relpath in self.files:
 			del self.files[self.files.index(relpath)]
 		if not relpath in self.suppressed_fs_events: 
-			pass
-			#self.sock.send({"del" : [relpath]}, self.route)
+			self.sock.send({"del" : [relpath]}, self.route)
 		else:
 			self.unsuppress_fs_event(relpath)
 
@@ -298,15 +308,18 @@ class SyncServer(Routing.ServerRoute):
 		self.ignore_events = []
 		self.route = None # Set by REQUIRED
 		self.broadcast = None # Set by REQUIRED
+		self.started = False
 
 
 	def start(self, handler):
-		if self.debug:
-			Logging.info("Sync server on route '%s' started!" % self.route)		
-		self.files = relative_recursive_ls(self.folder, self.folder, exclude=self.exclude)
-		observer = Observer()
-		observer.schedule(ReloadHandler(self), path=self.folder, recursive=True)
-		observer.start()
+		if not self.started:
+			if self.debug:
+				Logging.info("Sync server on route '%s' started!" % self.route)		
+			self.files = relative_recursive_ls(self.folder, self.folder, exclude=self.exclude)
+			observer = Observer()
+			observer.schedule(ReloadHandler(self), path=self.folder, recursive=True)
+			observer.start()
+			self.started = True
 
 
 	def run(self, data, handler):
@@ -341,7 +354,6 @@ class SyncServer(Routing.ServerRoute):
 					if os.path.exists(self.folder + dir):
 						for folder in relative_recursive_folder_ls(self.folder + dir, self.folder):
 							self.ignore_events.append(folder)
-							print("excluding folder: %s" % folder)
 						for file in relative_recursive_ls(self.folder + dir, self.folder):
 							self.ignore_events.append(file)
 							if file in self.files:
@@ -371,7 +383,6 @@ class SyncServer(Routing.ServerRoute):
 	def modified(self, event, created=False):
 		if self.debug and not created:
 			Logging.info("Modified file: '%s'" % event.src_path)
-		print(self.broadcast_file_excludes)
 		relpath = os.path.relpath(event.src_path, self.folder)
 		if relpath not in self.files:
 			self.files.append(relpath)
@@ -390,7 +401,6 @@ class SyncServer(Routing.ServerRoute):
 	def created(self, event):
 		if self.debug:
 			Logging.info("Created file: '%s'" % event.src_path)
-		print(self.broadcast_file_excludes)
 		self.modified(event, created=True)
 
 
@@ -398,7 +408,6 @@ class SyncServer(Routing.ServerRoute):
 	def deleted(self, event):
 		if self.debug:
 			Logging.info("Deleted file: '%s'" % event.src_path)
-		print(self.broadcast_file_excludes)
 		relpath = os.path.relpath(event.src_path, self.folder)
 		if not relpath in self.ignore_events: 
 			if relpath in self.files:
@@ -450,5 +459,5 @@ class SyncServer(Routing.ServerRoute):
 		print(event)
 
 
-	def stop(self, handler):
+	def stop(self):
 		self.deleted_storage.close()
