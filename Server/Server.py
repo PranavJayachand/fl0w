@@ -26,6 +26,21 @@ class Info(Routing.ServerRoute):
 			", ".join([route for route in list(handler.routes.keys())])), "info")
 
 
+class StdStream(Routing.ServerRoute):
+	def __init__(self):
+		self.stream_to = {}
+
+	def run(self, data, handler):
+		if type(data) is str:
+			if handler in self.stream_to.keys():
+				self.stream_to[handler].sock.send(data, "std_stream")
+		elif type(data) is dict:
+			if handler in self.stream_to.keys():
+				self.stream_to[handler].sock.send(data, "std_stream")
+				del self.stream_to[handler]
+
+
+
 class WallabyControl(Routing.ServerRoute):
 	def __init__(self):
 		self.actions_with_params = {"run" : self.run_program}
@@ -46,7 +61,7 @@ class WallabyControl(Routing.ServerRoute):
 				wallaby_controllers["%s:%d" % (wallaby_handler.sock.address, wallaby_handler.sock.port)] = wallaby_handler.name
 			handler.sock.send({"wallaby_controllers" : wallaby_controllers}, "wallaby_control")
 		elif data == "list_programs":
-			handler.sock.send({"programs" : self.programs})
+			handler.sock.send({"programs" : self.programs}, "wallaby_control")
 		elif type(data) is dict:
 			for wallaby_handler in handler.broadcast.channels[Handler.Channels.WALLABY]:
 				address_pair = "%s:%d" % (wallaby_handler.sock.address, wallaby_handler.sock.port)
@@ -54,36 +69,37 @@ class WallabyControl(Routing.ServerRoute):
 					if type(data[address_pair]) is list:
 						for action in data[address_pair]:
 							if action in self.actions_without_params.keys():
-								self.actions_without_params[action](wallaby_handler)
+								self.actions_without_params[action](wallaby_handler, handler)
 					elif type(data[address_pair]) is dict:
 						for action in data[address_pair]:
 							if action in self.actions_with_params.keys():
-								self.actions_without_params[action](data[address_pair][action], wallaby_handler)
+								self.actions_with_params[action](data[address_pair][action], wallaby_handler, handler)
 					return
 			handler.sock.send("Wallaby not connected anymore.", "error_report")
 
 
-	def restart(self, wallaby_handler):
+	def restart(self, wallaby_handler, handler):
 		wallaby_handler.sock.send("restart", "wallaby_control")
 
 
-	def disconnect(self, wallaby_handler):
+	def disconnect(self, wallaby_handler, handler):
 		pass
 
 
-	def reboot(self, wallaby_handler):
+	def reboot(self, wallaby_handler, handler):
 		wallaby_handler.sock.send("reboot", "wallaby_control")
 
 
-	def shutdown(self, wallaby_handler):
+	def shutdown(self, wallaby_handler, handler):
 		wallaby_handler.sock.send("shutdown", "wallaby_control")
 
 
-	def run_program(self, wallaby_handler, program):
+	def run_program(self, program, wallaby_handler, handler):
+		handler.routes["std_stream"].stream_to.update({wallaby_handler : handler})
 		wallaby_handler.sock.send({"run" : program}, "wallaby_control")		
 
 
-	def stop_programs(self, wallaby_handler):
+	def stop_programs(self, wallaby_handler, handler):
 		wallaby_handler.sock.send("stop", "wallaby_control")
 
 
@@ -156,8 +172,6 @@ class Handler(Server.Handler):
 		self.channel = None
 		self.routes = Routing.create_routes(routes, self)
 		self.name = "Unknown"
-		for route in self.routes:
-			self.routes[route].start(self)
 
 		
 	def handle(self, data, route):
@@ -170,9 +184,8 @@ class Handler(Server.Handler):
 	def finish(self):
 		if self.channel != None:
 			self.broadcast.remove(self, self.channel)
-		for route in self.routes:
-			self.routes[route].stop(self)
 		Logging.info("'%s:%d' disconnected." % (self.sock.address, self.sock.port))
+
 
 	def __repr__(self):
 		return "%s: %s:%d" % (self.name, self.sock.address, self.sock.port)
@@ -188,7 +201,6 @@ def folder_validator(folder):
 
 
 CONFIG_PATH = "server.cfg"
-INFO_PATH = "server.info"
 
 config = Config.Config()
 config.add(Config.Option("server_address", ("127.0.0.1", 3077)))
@@ -211,15 +223,20 @@ for channel in Handler.Channels.__dict__:
 		broadcast.add_channel(Handler.Channels.__dict__[channel])
 
 compile = Compile(config.binary_path)
+w_sync = SyncServer(config.binary_path, Handler.Channels.WALLABY, debug=config.debug, deleted_db_path="deleted-w.pickle")
+s_sync = SyncServer(config.source_path, Handler.Channels.SUBLIME, debug=config.debug, deleted_db_path="deleted-s.pickle", modified_hook=compile.compile)
 
 try:
 	Logging.header("fl0w server started on '%s:%d'" % (config.server_address[0], config.server_address[1]))
 	server.run(Handler, 
 		{"broadcast" : broadcast,
-		"routes" : {"info" : Info(), "wallaby_control" : WallabyControl(), "get_info" : GetInfo(), "compile" : compile,
-		WALLABY_SYNC_ROUTE : SyncServer(config.binary_path, Handler.Channels.WALLABY, debug=config.debug, deleted_db_path="deleted-w.pickle"),
-		SUBLIME_SYNC_ROUTE : SyncServer(config.source_path, Handler.Channels.SUBLIME, debug=config.debug, deleted_db_path="deleted-s.pickle", modified_hook=compile.compile)}})
+		"routes" : {"info" : Info(), "wallaby_control" : WallabyControl(), 
+		"get_info" : GetInfo(), "compile" : compile, "std_stream" : StdStream(),
+		WALLABY_SYNC_ROUTE : w_sync,
+		SUBLIME_SYNC_ROUTE : s_sync}})
 except KeyboardInterrupt:
 	Logging.header("Gracefully shutting down server.")
+	w_sync.stop()
+	s_sync.stop()
 	server.stop()
 	Logging.success("Server shutdown successful.")
