@@ -1,5 +1,6 @@
 from traceback import print_exception
 from sys import exc_info
+from platform import uname
 
 def capture_trace():
 	exc_type, exc_value, exc_traceback = exc_info()
@@ -12,3 +13,6 @@ def is_socket_related_error(error):
 		if str(error) not in ("Connection closed", "[Errno 9] Bad file descriptor"):
 			return False
 	return True
+
+def is_wallaby():
+	return "ARMv7" in uname()
