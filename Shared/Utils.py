@@ -1,6 +1,6 @@
 from traceback import print_exception
 from sys import exc_info
-from platform import uname
+import platform
 
 def capture_trace():
 	exc_type, exc_value, exc_traceback = exc_info()
@@ -15,4 +15,4 @@ def is_socket_related_error(error):
 	return True
 
 def is_wallaby():
-	return "ARMv7" in uname()
+	return "3.18.21-custom" in platform.uname().release
