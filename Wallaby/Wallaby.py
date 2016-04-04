@@ -5,6 +5,7 @@ from Utils import capture_trace
 from Utils import is_wallaby
 import Routing
 import Logging
+import Config
 
 import socket
 import time
@@ -112,7 +113,20 @@ class WallabyClient:
 	def stop(self):
 		self.sock.close()
 
-wallaby_client = WallabyClient(("127.0.0.1", 3077), debug=True)
+
+CONFIG_PATH = "wallaby.cfg"
+
+config = Config.Config()
+config.add(Config.Option("server_address", ("192.168.0.20", 3077)))
+config.add(Config.Option("debug", True, validator=lambda x: True if True or False else False))
+
+try:
+	config = config.read_from_file(CONFIG_PATH)
+except FileNotFoundError:
+	config.write_to_file(CONFIG_PATH)
+	config = config.read_from_file(CONFIG_PATH)
+
+wallaby_client = WallabyClient(config.server_address, debug=config.debug)
 try:
 	wallaby_client.start()
 except KeyboardInterrupt:
