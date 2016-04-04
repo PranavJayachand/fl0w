@@ -15,7 +15,7 @@ import subprocess
 
 CHANNEL = "w"
 IS_WALLABY = is_wallaby()
-PATH = "/home/root/Documents/KISS/" if IS_WALLABY else sys.argv[1]
+PATH = "/home/root/Documents/KISS/bin/" if IS_WALLABY else sys.argv[1]
 
 class WallabyControl(Routing.ClientRoute):
 	def __init__(self):
