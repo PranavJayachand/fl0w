@@ -40,7 +40,7 @@ class WallabyControl(Routing.ClientRoute):
 			command = ["gstdbuf", "-i0", "-o0", "-e0"]
 		else:
 			command = ["stdbuf", "-i0", "-o0", "-e0"]
-		command.append("./%s%s/botball_user_program" % (handler.sync.folder, program))
+		command.append("%s%s/botball_user_program" % (handler.sync.folder, program))
 		process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
 		# Poll process for new output until finished
