@@ -92,7 +92,7 @@ class WallabyClient:
 		self.sock = ESock(socket.create_connection(host_port_pair), debug=debug)
 		self.connected = True
 		self.debug = debug
-		self.sync = SyncClient(self.sock, sys.argv[1], "w_sync", debug=True)
+		self.sync = SyncClient(self.sock, PATH, "w_sync", debug=True)
 		self.routes = {"wallaby_control" : WallabyControl(), "w_sync" : self.sync, 
 		"get_info" : GetInfo()}
 
@@ -114,6 +114,7 @@ class WallabyClient:
 		self.sock.close()
 
 
+
 CONFIG_PATH = "wallaby.cfg"
 
 config = Config.Config()
@@ -124,6 +125,8 @@ try:
 	config = config.read_from_file(CONFIG_PATH)
 except FileNotFoundError:
 	config.write_to_file(CONFIG_PATH)
+	Logging.info("Config file created. Please modify to reflect your setup.")
+	exit(1)
 	config = config.read_from_file(CONFIG_PATH)
 
 wallaby_client = WallabyClient(config.server_address, debug=config.debug)
