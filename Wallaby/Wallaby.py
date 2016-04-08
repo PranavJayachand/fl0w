@@ -23,7 +23,8 @@ if not IS_WALLABY:
 	Logging.warning("Binaries that were created for Wallaby Controllers will not run on a simulated Wallaby.")
 
 class WallabyControl(Routing.ClientRoute):
-	def __init__(self):
+	def __init__(self, output_unbuffer):
+		self.output_unbuffer = output_unbuffer
 		self.actions_with_params = {"run" : self.run_program}
 		self.actions_without_params = {"disconnect" : self.disconnect, 
 		"reboot" : self.reboot, "shutdown" : self.shutdown, "stop" : self.stop}
@@ -40,10 +41,7 @@ class WallabyControl(Routing.ClientRoute):
 
 
 	def run_program(self, handler, program):
-		if not IS_WALLABY:
-			command = ["gstdbuf", "-i0", "-o0", "-e0"]
-		else:
-			command = ["stdbuf", "-i0", "-o0", "-e0"]
+		command = [self.output_unbuffer, "-i0", "-o0", "-e0"]
 		command.append("%s%s/botball_user_program" % (handler.sync.folder, program))
 		self.currently_running_program = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
@@ -94,13 +92,13 @@ class GetInfo(Routing.ClientRoute):
 
 
 class WallabyClient:
-	def __init__(self, host_port_pair, debug=False):
+	def __init__(self, host_port_pair, routes, debug=False):
 		self.sock = ESock(socket.create_connection(host_port_pair), debug=debug)
 		self.connected = True
 		self.debug = debug
 		self.sync = SyncClient(self.sock, PATH, "w_sync", debug=True)
-		self.routes = {"wallaby_control" : WallabyControl(), "w_sync" : self.sync, 
-		"get_info" : GetInfo()}
+		routes.update({"w_sync" : self.sync})
+		self.routes = routes
 
 
 	def start(self):
@@ -124,8 +122,9 @@ class WallabyClient:
 CONFIG_PATH = "wallaby.cfg"
 
 config = Config.Config()
-config.add(Config.Option("server_address", ("192.168.0.20", 3077)))
+config.add(Config.Option("server_address", ("127.0.0.1", 3077)))
 config.add(Config.Option("debug", True, validator=lambda x: True if True or False else False))
+config.add(Config.Option("output_unbuffer", "stdbuf"))
 
 try:
 	config = config.read_from_file(CONFIG_PATH)
@@ -135,7 +134,9 @@ except FileNotFoundError:
 	exit(1)
 	config = config.read_from_file(CONFIG_PATH)
 
-wallaby_client = WallabyClient(config.server_address, debug=config.debug)
+wallaby_client = WallabyClient(config.server_address, 
+	{"wallaby_control" : WallabyControl(config.output_unbuffer), "get_info" : GetInfo()},
+	debug=config.debug)
 try:
 	wallaby_client.start()
 except KeyboardInterrupt:
