@@ -110,20 +110,35 @@ def base64_str_decode(path):
 class ReloadHandler(FileSystemEventHandler):
 	def __init__(self, sync):
 		self.sync = sync
+		self.duplicated_events = {}		
 
 
 	def on_modified(self, event):
 		if get_name_from_path(event.src_path) not in self.sync.exclude and not event.is_directory:
-			self.sync.modified(event)
+			if event in self.duplicated_events:
+				if self.duplicated_events[event] != md5(event.src_path):
+					self.sync.modified(event)
+					del self.duplicated_events[event]
+			else:
+				self.duplicated_events[event] = md5(event.src_path)
+				self.sync.modified(event)
 
 
 	def on_created(self, event):
 		if get_name_from_path(event.src_path) not in self.sync.exclude and not event.is_directory:
-			self.sync.created(event)
+			if event in self.duplicated_events:
+				if self.duplicated_events[event] != md5(event.src_path):
+					self.sync.created(event)
+				del self.duplicated_events[event]
+			else:
+				self.duplicated_events[event] = md5(event.src_path)
+				self.sync.created(event)
 
 
 	def on_deleted(self, event):
 		if get_name_from_path(event.src_path) not in self.sync.exclude:
+			if event in self.duplicated_events:
+				del self.duplicated_events[event]
 			if not event.is_directory:
 				self.sync.deleted(event)
 			else:
@@ -329,14 +344,25 @@ class SyncServer(Routing.ServerRoute):
 				for file in data["list"]:
 					client_file = File(file, data["list"][file]["md5"], data["list"][file]["mtime"])
 					client_files.append(client_file)
+					# If file doesn't exist on server check if it's in deleted storage
 					if not file in self.files:
+						# Delete storage works with objects
 						file = File(file, data["list"][file]["md5"], data["list"][file]["mtime"])
 						if file in self.deleted_storage.files:
 							handler.sock.send({"del" : [file.relpath]}, self.route)
 						else:
+							# Request the file
 							handler.sock.send({"req" : [file.relpath]}, self.route)
+				# Add all files that are not on the client but preserve newer ones by requesting them
 				for file in self.files:
 					file = File(file, md5(self.folder + file), get_mtime(self.folder + file))
+					# Make sure that the newer version will be requested
+					for client_file in client_files:
+						if file.relpath == client_file.relpath:
+							if client_file.mtime > file.mtime:
+								client_files.append(file) # Hack that makes the iteration below work
+								handler.sock.send({"req" : [file.relpath]}, self.route)			
+					# Not the same file because mtime is different
 					if file not in client_files:
 						handler.sock.send({"add" : {file.relpath : {"content" : base64_str_decode(self.folder + file.relpath), 
 							"mtime" : os.path.getmtime(self.folder + file.relpath)}}}, self.route)
