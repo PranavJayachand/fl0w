@@ -114,6 +114,11 @@ class Compile(Routing.ServerRoute):
 
 	def __init__(self, binary_path):
 		self.binary_path = os.path.abspath(binary_path) + "/"
+		self.botball_library_avaliable = os.path.isfile("/usr/local/lib/libbotball.so")
+		if not self.botball_library_avaliable:
+			Logging.warning("Botball libraries not found. All botball functions are unavaliable.")
+		if platform.machine() != "armv7l":
+			Logging.warning("Wrong processor architecture! Generated binaries will not run on Wallaby Controllers.")
 
 
 	def compile(self, path, relpath, handler=None):
@@ -123,9 +128,10 @@ class Compile(Routing.ServerRoute):
 			if not os.path.exists(full_path):
 				os.mkdir(full_path)
 			error = True
-			if platform.machine() != "armv7l":
-				Logging.warning("Wrong processor architecture! Generated binaries will not run on Wallaby Controllers.")
-			p = Popen(["gcc", "-pipe", "-O0", "-o", "%s" % full_path + "/botball_user_program", path + relpath], stdout=PIPE, stderr=PIPE)
+			command = ["gcc", "-pipe", "-O0", "-lbotball", "-o", "%s" % full_path + "/botball_user_program", path + relpath]
+			if not self.botball_library_avaliable:
+				del command[command.index("-lbotball")]
+			p = Popen(command, stdout=PIPE, stderr=PIPE)
 			error = False if p.wait() == 0 else True
 			result = ""
 			for line in p.communicate():
