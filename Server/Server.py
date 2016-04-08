@@ -128,9 +128,10 @@ class Compile(Routing.ServerRoute):
 			if not os.path.exists(full_path):
 				os.mkdir(full_path)
 			error = True
-			command = ["gcc", "-pipe", "-O0", "-lbotball", "-o", "%s" % full_path + "/botball_user_program", path + relpath]
+			command = ["gcc", "-pipe", "-O0", "-lbotball", "-lwallaby", "-o", "%s" % full_path + "/botball_user_program", path + relpath]
 			if not self.botball_library_avaliable:
 				del command[command.index("-lbotball")]
+				del command[command.index("-lwallaby")]
 			p = Popen(command, stdout=PIPE, stderr=PIPE)
 			error = False if p.wait() == 0 else True
 			result = ""
