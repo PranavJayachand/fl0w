@@ -20,7 +20,6 @@ def convert_data(data, data_type):
 		elif data_type == DataTypes.float:
 			data = float(data.decode())
 		elif data_type == DataTypes.json:
-			print(data.decode())
 			data = json.loads(data.decode())
 	except Exception:
 		capture_trace()
