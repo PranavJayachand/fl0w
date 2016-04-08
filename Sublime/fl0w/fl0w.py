@@ -239,7 +239,7 @@ class Fl0w:
 		menu = Menu(subtitles=False)
 
 		menu.add(Entry("Run", action=self.invoke_run_menu))
-		for action in ("Stop", "Restart", "Shutdown", "Reboot", "Disconnect"):
+		for action in ("Stop", "Shutdown", "Reboot", "Disconnect"):
 			menu.add(Entry(action, action=self.sock.send, kwargs={"data" : {wallaby : [action.lower()]}, "route" : "wallaby_control"}))
 		menu.invoke(self.window)
 
