@@ -45,7 +45,7 @@ class StdStream(Routing.ServerRoute):
 class WallabyControl(Routing.ServerRoute):
 	def __init__(self):
 		self.actions_with_params = {"run" : self.run_program}
-		self.actions_without_params = {"restart" : self.restart, "disconnect" : self.disconnect, 
+		self.actions_without_params = {"disconnect" : self.disconnect, 
 		"reboot" : self.reboot, "shutdown" : self.shutdown, "stop" : self.stop_programs}
 		self.programs = []
 
