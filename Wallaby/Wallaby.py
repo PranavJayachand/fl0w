@@ -13,6 +13,7 @@ import os
 import sys
 import platform
 import subprocess
+import _thread
 
 CHANNEL = "w"
 IS_WALLABY = is_wallaby()
@@ -34,9 +35,8 @@ class WallabyControl(Routing.ClientRoute):
 				self.actions_without_params[data](handler)
 		elif type(data) is dict:
 			for action in data:
-				print(action)
 				if action in self.actions_with_params.keys():
-					self.actions_with_params[action](handler, data[action])
+					_thread.start_new_thread(self.actions_with_params[action], (handler, data[action]))
 
 
 	def run_program(self, handler, program):
@@ -58,9 +58,10 @@ class WallabyControl(Routing.ClientRoute):
 
 	def stop(self, handler):
 		if self.currently_running_program != None:
-			Logging.info("Killed currently running programm.")
+			Logging.info("Killing currently running programm.")
 			self.currently_running_program.kill()
-		Logging.info("No program started by fl0w.")
+		else:
+			Logging.info("No program started by fl0w.")
 		
 
 	def reboot(self, handler):
