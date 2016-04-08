@@ -72,7 +72,7 @@ class ESock:
 		try:
 			data = convert_data(data, data_type)
 		except ConvertFailedError:
-			Logging.error("Invalid data type: '%s:%d'" % (self.address, self.port))
+			Logging.error("Invalid data type: '%s' ('%s:%d')" % (data_type.decode(), self.address, self.port))
 			if self.disconnect_callback != None:
 				self.disconnect_callback()
 			self._sock.close()
