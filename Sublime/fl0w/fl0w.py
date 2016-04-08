@@ -1,6 +1,7 @@
 from sys import path
 import os
 import _thread
+from time import strftime
 
 fl0w_path = os.path.dirname(os.path.realpath(__file__))
 shared_path = os.path.dirname(os.path.realpath(__file__)) + "/Shared/"
@@ -110,9 +111,9 @@ class Fl0w:
 		def run(self, data, handler):
 			status = ""
 			if data["failed"]:
-				status = "Compile failed (%s)." % data["relpath"]
+				status = "Compile failed (%s) (%s)." % (data["relpath"], strftime("%H:%M:%S"))
 			else:
-				status = "Compile completed successfully. (%s)." % data["relpath"]
+				status = "Compile completed successfully. (%s) (%s)." % (data["relpath"], strftime("%H:%M:%S"))
 			view = handler.window.create_output_panel('compile_panel')
 			view.set_syntax_file("Packages/fl0w/CompileHighlight.sublime-syntax")
 			view.settings().set("draw_white_space", "none")
