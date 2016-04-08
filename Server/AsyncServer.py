@@ -15,8 +15,8 @@ class Server:
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		try:
 			self.sock.bind(host_port_pair)
-		except OSError:
-			Logging.error("Port currently in use. Exiting...")
+		except OSError as e:
+			Logging.error(str(e))
 			exit(1)
 		self.sock.listen(2)
 		self.handlers = []
