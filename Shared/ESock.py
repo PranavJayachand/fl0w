@@ -3,6 +3,7 @@ import socket
 import struct
 import DataTypes
 import Logging
+from Utils import capture_trace
 
 MAX_ROUTE_LENGTH = 16
 
@@ -19,8 +20,10 @@ def convert_data(data, data_type):
 		elif data_type == DataTypes.float:
 			data = float(data.decode())
 		elif data_type == DataTypes.json:
+			print(data.decode())
 			data = json.loads(data.decode())
 	except Exception:
+		capture_trace()
 		raise ConvertFailedError()
 	return data
 
