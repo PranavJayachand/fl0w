@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import re
+import platform
 from subprocess import Popen, PIPE
 
 
@@ -78,10 +79,6 @@ class WallabyControl(Routing.ServerRoute):
 			handler.sock.send("Wallaby not connected anymore.", "error_report")
 
 
-	def restart(self, wallaby_handler, handler):
-		wallaby_handler.sock.send("restart", "wallaby_control")
-
-
 	def disconnect(self, wallaby_handler, handler):
 		pass
 
@@ -126,6 +123,8 @@ class Compile(Routing.ServerRoute):
 			if not os.path.exists(full_path):
 				os.mkdir(full_path)
 			error = True
+			if platform.machine() != "armv7l":
+				Logging.warning("Wrong processor architecture! Generated binaries will not run on Wallaby Controllers.")
 			p = Popen(["gcc", "-pipe", "-O0", "-o", "%s" % full_path + "/botball_user_program", path + relpath], stdout=PIPE, stderr=PIPE)
 			error = False if p.wait() == 0 else True
 			result = ""
