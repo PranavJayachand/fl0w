@@ -26,6 +26,7 @@ class WallabyControl(Routing.ClientRoute):
 		self.actions_with_params = {"run" : self.run_program}
 		self.actions_without_params = {"disconnect" : self.disconnect, 
 		"reboot" : self.reboot, "shutdown" : self.shutdown, "stop" : self.stop}
+		self.currently_running_program = None
 
 	def run(self, data, handler):
 		if type(data) is str:
@@ -44,20 +45,23 @@ class WallabyControl(Routing.ClientRoute):
 		else:
 			command = ["stdbuf", "-i0", "-o0", "-e0"]
 		command.append("%s%s/botball_user_program" % (handler.sync.folder, program))
-		process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+		self.currently_running_program = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
 		# Poll process for new output until finished
-		for line in iter(process.stdout.readline, b""):
+		for line in iter(self.currently_running_program.stdout.readline, b""):
 			handler.sock.send(line.decode(), "std_stream")
 
-		process.wait()
-		handler.sock.send({"return_code" : process.returncode}, "std_stream")
+		self.currently_running_program.wait()
+		handler.sock.send({"return_code" : self.currently_running_program.returncode}, "std_stream")
+		self.currently_running_program = None
 
 
 	def stop(self, handler):
-		Logging.info("Stopping all processes with executable named botball_user_program.")
-		os.system("killall botball_user_program")
-
+		if self.currently_running_program != None:
+			Logging.info("Killed currently running programm.")
+			self.currently_running_program.kill()
+		Logging.info("No program started by fl0w.")
+		
 
 	def reboot(self, handler):
 		self.stop(handler)
