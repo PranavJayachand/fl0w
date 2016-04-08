@@ -18,10 +18,13 @@ CHANNEL = "w"
 IS_WALLABY = is_wallaby()
 PATH = "/home/root/Documents/KISS/bin/" if IS_WALLABY else sys.argv[1]
 
+if not IS_WALLABY:
+	Logging.warning("Binaries that were created for Wallaby Controllers will not run on a simulated Wallaby.")
+
 class WallabyControl(Routing.ClientRoute):
 	def __init__(self):
 		self.actions_with_params = {"run" : self.run_program}
-		self.actions_without_params = {"restart" : self.restart, "disconnect" : self.disconnect, 
+		self.actions_without_params = {"disconnect" : self.disconnect, 
 		"reboot" : self.reboot, "shutdown" : self.shutdown, "stop" : self.stop}
 
 	def run(self, data, handler):
@@ -46,7 +49,6 @@ class WallabyControl(Routing.ClientRoute):
 		# Poll process for new output until finished
 		for line in iter(process.stdout.readline, b""):
 			handler.sock.send(line.decode(), "std_stream")
-			print(line)
 
 		process.wait()
 		handler.sock.send({"return_code" : process.returncode}, "std_stream")
@@ -54,21 +56,20 @@ class WallabyControl(Routing.ClientRoute):
 
 	def stop(self, handler):
 		Logging.info("Stopping all processes with executable named botball_user_program.")
-		os.system("killall -s 2 botball_user_program")
+		os.system("killall botball_user_program")
 
-
-	def restart(self, handler):
-		Logging.warning("Restart not implemented yet.")
-		
 
 	def reboot(self, handler):
+		self.stop(handler)
 		os.system("reboot")
 		exit(0)
 
 	def shutdown(self, handler):
+		self.stop(handler)
 		os.system("shutdown -h 0")
 
 	def disconnect(self, handler):
+		self.stop(handler)
 		handler.sock.close()
 
 
