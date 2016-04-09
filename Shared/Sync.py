@@ -74,6 +74,18 @@ def relative_recursive_ls(path, relative_to, exclude=[]):
 	return files
 
 
+def relative_recursive_item_ls(path, relative_to, exclude=[]):
+	if path[-1] != "/":
+		path += "/"
+	items = []
+	for item in os.listdir(path):
+		if item not in exclude:
+			items.append(os.path.relpath(path + item, relative_to))
+			if os.path.isdir(path + item):				
+				items += relative_recursive_ls(path + item, relative_to, exclude)
+	return items	
+
+
 def relative_recursive_folder_ls(path, relative_to, exclude=[]):
 	if path[-1] != "/":
 		path += "/"
@@ -107,51 +119,55 @@ def get_file_content(path):
 def base64_str_decode(path):
 	return base64.b64encode(get_file_content(path)).decode()
 
+
 class ReloadHandler(FileSystemEventHandler):
-	def __init__(self, sync):
+	def __init__(self, sync, path):
 		self.sync = sync
-		self.duplicated_events = {}		
+		self.path = path
+		self.supressed_events = {}
+		self.deleted_ignore = []
+		self.moved_ignore = []		
 
 
 	def on_modified(self, event):
-		if get_name_from_path(event.src_path) not in self.sync.exclude and not event.is_directory:
-			if event in self.duplicated_events:
-				if self.duplicated_events[event] != md5(event.src_path):
+		if not event.is_directory and os.path.isfile(event.src_path):
+			if event.src_path in self.supressed_events:
+				if self.supressed_events[event.src_path] != md5(event.src_path):
+					del self.supressed_events[event.src_path]
 					self.sync.modified(event)
-					del self.duplicated_events[event]
 			else:
-				self.duplicated_events[event] = md5(event.src_path)
+				self.supressed_events[event.src_path] = md5(event.src_path)
 				self.sync.modified(event)
 
 
 	def on_created(self, event):
-		if get_name_from_path(event.src_path) not in self.sync.exclude and not event.is_directory:
-			if event in self.duplicated_events:
-				if self.duplicated_events[event] != md5(event.src_path):
-					self.sync.created(event)
-				del self.duplicated_events[event]
-			else:
-				self.duplicated_events[event] = md5(event.src_path)
-				self.sync.created(event)
+		self.on_modified(event)			
 
 
 	def on_deleted(self, event):
-		if get_name_from_path(event.src_path) not in self.sync.exclude:
-			if event in self.duplicated_events:
-				del self.duplicated_events[event]
-			if not event.is_directory:
-				self.sync.deleted(event)
-			else:
+		# Check if file was actually deleted and doesn't exist again
+		if not os.path.exists(event.src_path):
+			if event.is_directory:
 				self.sync.deleted_dir(event)
+			else:
+				self.sync.deleted(event)
 
 
 	def on_moved(self, event):
-		if get_name_from_path(event.src_path) not in self.sync.exclude: 
-			if not event.is_directory:
+		if event.is_directory:
+			if not event.dest_path in self.moved_ignore:
+				for item in relative_recursive_ls(event.dest_path, self.path):
+					print(self.path + "/" + item)
+					if not item in self.moved_ignore:
+						self.moved_ignore.append(self.path + "/" + item)
+				self.sync.moved_dir(event)
+			else:
+				del self.moved_ignore[self.moved_ignore.index(event.dest_path)]
+		else:
+			if not event.dest_path in self.moved_ignore:
 				self.sync.moved(event)
 			else:
-				self.sync.moved_dir(event)
-
+				del self.moved_ignore[self.moved_ignore.index(event.dest_path)]
 
 
 class SyncClient(Routing.ClientRoute):
@@ -165,7 +181,7 @@ class SyncClient(Routing.ClientRoute):
 		self.files = relative_recursive_ls(folder, folder, exclude=self.exclude)
 		self.suppressed_fs_events = []
 		self.observer = Observer()
-		self.observer.schedule(ReloadHandler(self), path=self.folder, recursive=True)
+		self.observer.schedule(ReloadHandler(self, self.folder), path=self.folder, recursive=True)
 		self.observer.start()
 
 
@@ -332,7 +348,7 @@ class SyncServer(Routing.ServerRoute):
 				Logging.info("Sync server on route '%s' started!" % self.route)		
 			self.files = relative_recursive_ls(self.folder, self.folder, exclude=self.exclude)
 			observer = Observer()
-			observer.schedule(ReloadHandler(self), path=self.folder, recursive=True)
+			observer.schedule(ReloadHandler(self, self.folder), path=self.folder, recursive=True)
 			observer.start()
 			self.started = True
 
@@ -351,7 +367,7 @@ class SyncServer(Routing.ServerRoute):
 						if file in self.deleted_storage.files:
 							handler.sock.send({"del" : [file.relpath]}, self.route)
 						else:
-							# Request the file
+							# Request the file if it's not in delete storage
 							handler.sock.send({"req" : [file.relpath]}, self.route)
 				# Add all files that are not on the client but preserve newer ones by requesting them
 				for file in self.files:
