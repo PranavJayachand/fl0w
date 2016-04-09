@@ -114,9 +114,9 @@ class Compile(Routing.ServerRoute):
 
 	def __init__(self, binary_path):
 		self.binary_path = os.path.abspath(binary_path) + "/"
-		self.botball_library_avaliable = os.path.isfile("/usr/local/lib/libbotball.so")
-		if not self.botball_library_avaliable:
-			Logging.warning("Botball libraries not found. All botball functions are unavaliable.")
+		self.wallaby_library_avaliable = os.path.isfile("/usr/local/lib/libaurora.so") and os.path.isfile("/usr/local/lib/libdaylite.so")
+		if not self.wallaby_library_avaliable:
+			Logging.warning("Wallaby library not found. All Wallaby functions are unavaliable.")
 		if platform.machine() != "armv7l":
 			Logging.warning("Wrong processor architecture! Generated binaries will not run on Wallaby Controllers.")
 
@@ -128,9 +128,8 @@ class Compile(Routing.ServerRoute):
 			if not os.path.exists(full_path):
 				os.mkdir(full_path)
 			error = True
-			command = ["gcc", "-pipe", "-O0", "-lbotball", "-lwallaby", "-o", "%s" % full_path + "/botball_user_program", path + relpath]
-			if not self.botball_library_avaliable:
-				del command[command.index("-lbotball")]
+			command = ["gcc", "-pipe", "-O0", "-lwallaby", "-o", "%s" % full_path + "/botball_user_program", path + relpath]
+			if not self.wallaby_library_avaliable:
 				del command[command.index("-lwallaby")]
 			p = Popen(command, stdout=PIPE, stderr=PIPE)
 			error = False if p.wait() == 0 else True
