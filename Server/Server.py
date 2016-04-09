@@ -112,7 +112,8 @@ class Compile(Routing.ServerRoute):
 		return False
 
 
-	def __init__(self, binary_path):
+	def __init__(self, source_path, binary_path):
+		self.source_path = os.path.abspath(source_path) + "/"
 		self.binary_path = os.path.abspath(binary_path) + "/"
 		self.wallaby_library_avaliable = os.path.isfile("/usr/local/lib/libaurora.so") and os.path.isfile("/usr/local/lib/libdaylite.so")
 		if not self.wallaby_library_avaliable:
@@ -128,7 +129,7 @@ class Compile(Routing.ServerRoute):
 			if not os.path.exists(full_path):
 				os.mkdir(full_path)
 			error = True
-			command = ["gcc", "-pipe", "-O0", "-lwallaby", "-o", "%s" % full_path + "/botball_user_program", path + relpath]
+			command = ["gcc", "-pipe", "-O0", "-lwallaby", "-I%s" % self.source_path, "-o", "%s" % full_path + "/botball_user_program", path + relpath]
 			if not self.wallaby_library_avaliable:
 				del command[command.index("-lwallaby")]
 			p = Popen(command, stdout=PIPE, stderr=PIPE)
@@ -227,7 +228,7 @@ for channel in Handler.Channels.__dict__:
 	if not channel.startswith("_"):
 		broadcast.add_channel(Handler.Channels.__dict__[channel])
 
-compile = Compile(config.binary_path)
+compile = Compile(config.source_path, config.binary_path)
 w_sync = SyncServer(config.binary_path, Handler.Channels.WALLABY, debug=config.debug, deleted_db_path="deleted-w.pickle")
 s_sync = SyncServer(config.source_path, Handler.Channels.SUBLIME, debug=config.debug, deleted_db_path="deleted-s.pickle", modified_hook=compile.compile)
 
