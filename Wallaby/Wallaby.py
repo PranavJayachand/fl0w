@@ -63,12 +63,12 @@ class WallabyControl(Routing.ClientRoute):
 		
 
 	def reboot(self, handler):
-		self.stop(handler)
+		self.disconnect(handler)
 		os.system("reboot")
 		exit(0)
 
 	def shutdown(self, handler):
-		self.stop(handler)
+		self.disconnect(handler)
 		os.system("shutdown -h 0")
 
 	def disconnect(self, handler):
