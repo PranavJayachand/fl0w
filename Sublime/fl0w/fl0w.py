@@ -14,7 +14,7 @@ if shared_path not in path:
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-import sublime 
+import sublime
 import sublime_plugin
 
 import socket
@@ -31,9 +31,8 @@ CHANNEL = "s"
 
 def plugin_unloaded():
 	for window in windows:
-		if hasattr(window, "fl0w"):
-			if window.fl0w.connected:
-				window.fl0w.invoke_disconnect()
+		if hasattr(window, "fl0w") and window.fl0w.connected:
+			window.fl0w.invoke_disconnect()
 
 
 
@@ -58,7 +57,7 @@ class ReloadHandler(FileSystemEventHandler):
 			print("Created: %s" % event)
 
 		def on_deleted(self, event):
-			print("Deleted: %s" % event)   
+			print("Deleted: %s" % event)
 
 
 class Fl0w:
@@ -82,7 +81,7 @@ class Fl0w:
 
 
 	def invoke_about(self):
-		if sublime.ok_cancel_dialog("fl0w by @robot0nfire", "robot0nfire.com"):	
+		if sublime.ok_cancel_dialog("fl0w by @robot0nfire", "robot0nfire.com"):
 			webbrowser.open("http://robot0nfire.com")
 
 
@@ -101,7 +100,7 @@ class Fl0w:
 			if data == "":
 				handler.sock.send({"type" : CHANNEL}, "get_info")
 
-	
+
 	class ErrorReport(Routing.ClientRoute):
 		def run(self, data, handler):
 			sublime.error_message(data)
@@ -135,7 +134,7 @@ class Fl0w:
 			self.view.settings().set("draw_white_space", "none")
 			self.view.settings().set("draw_indent_guides", False)
 			self.view.settings().set("gutter", False)
-			self.view.settings().set("line_numbers", False)			
+			self.view.settings().set("line_numbers", False)
 
 		def run(self, data, handler):
 			self.setup_view(handler)
@@ -171,14 +170,14 @@ class Fl0w:
 				std_stream = Fl0w.StdStream()
 				self.s_sync = SyncClient(self.sock, self.folder, "s_sync")
 				compile = Fl0w.Compile()
-				_thread.start_new_thread(sock_handler, (self.sock, {"error_report": error_report, 
-					"info" : info, "wallaby_control" : wallaby_control, "get_info" : get_info, 
+				_thread.start_new_thread(sock_handler, (self.sock, {"error_report": error_report,
+					"info" : info, "wallaby_control" : wallaby_control, "get_info" : get_info,
 					"s_sync" : self.s_sync, "compile" : compile, "std_stream" : std_stream}, self))
 				self.s_sync.start()
 				self.connected = True
 				# Saving last server address
-				sublime.load_settings("fl0w.sublime-setting").set("server_address", connect_details_raw)
-				sublime.save_settings("fl0w.sublime-setting")
+				sublime.load_settings("fl0w.sublime-settings").set("server_address", connect_details_raw)
+				sublime.save_settings("fl0w.sublime-settings")
 			except OSError as e:
 				sublime.error_message("Error during connection creation:\n %s" % str(e))
 		else:
@@ -187,7 +186,7 @@ class Fl0w:
 
 	# Input invokers
 	def invoke_connect(self):
-		address = sublime.load_settings("fl0w.sublime-setting").get("server_address")
+		address = sublime.load_settings("fl0w.sublime-settings").get("server_address")
 		address = "" if type(address) is not str else address
 		Input("Address:Port", initial_text=address, on_done=self.connect).invoke(self.window)
 
@@ -198,14 +197,14 @@ class Fl0w:
 			sublime.message_dialog("Connection closed ('%s')" % self.folder)
 			self.s_sync.observer.stop()
 			self.sock.close()
-		
+
 
 	def invoke_wallaby_control(self):
 		self.sock.send("list_wallaby_controllers", "wallaby_control")
 
 
 	def invoke_run_menu(self):
-		self.sock.send("list_programs", "wallaby_control")		
+		self.sock.send("list_programs", "wallaby_control")
 
 
 	class WallabyControl(Routing.ClientRoute):
@@ -229,7 +228,7 @@ class Fl0w:
 				if entry_count != 0:
 					run_menu.invoke(handler.window, back=handler.main_menu)
 				else:
-					sublime.error_message("No programs avaliable.")				
+					sublime.error_message("No programs avaliable.")
 
 	def run_program(self, program):
 		self.sock.send({self.selected_wallaby : {"run" : program}}, "wallaby_control")
@@ -255,12 +254,12 @@ class Fl0w:
 	def set_debug(self, debug):
 		sublime.status_message("fl0w: Debug now '%s'" % debug)
 		self.sock.debug = debug
-		sublime.load_settings("fl0w.sublime-setting").set("debug", debug)
-		sublime.save_settings("fl0w.sublime-setting")
+		sublime.load_settings("fl0w.sublime-settings").set("debug", debug)
+		sublime.save_settings("fl0w.sublime-settings")
 
 
 class Fl0wCommand(sublime_plugin.WindowCommand):
-	def run(self): 
+	def run(self):
 		valid_window_setup = True
 		folder_count = len(self.window.folders())
 		if folder_count > 1:
@@ -268,7 +267,7 @@ class Fl0wCommand(sublime_plugin.WindowCommand):
 			valid_window_setup = False
 		elif folder_count == 0:
 			sublime.error_message("No folder open in window.")
-			valid_window_setup = False			
+			valid_window_setup = False
 		if valid_window_setup:
 			if not hasattr(self.window, "fl0w"):
 				folder = self.window.folders()[0]
@@ -276,8 +275,8 @@ class Fl0wCommand(sublime_plugin.WindowCommand):
 				if not ".no-fl0w" in files:
 					if not ".fl0w" in files:
 						if sublime.ok_cancel_dialog("""We've detected that this is your first time using fl0w in your current directory.
-												We don't want to be responsible for any lost work so please backup your files before proceding. 
-												(An empty project directory is recommended but not necessary.)""", "Yes"):
+									       We don't want to be responsible for any lost work so please backup your files before proceding.
+									       (An empty project directory is recommended but not necessary.)""", "Yes"):
 							open(folder + "/.fl0w", 'a').close()
 							self.window.fl0w = Fl0w(self.window)
 							windows.append(self.window)
@@ -289,7 +288,7 @@ class Fl0wCommand(sublime_plugin.WindowCommand):
 						windows.append(self.window)
 						self.window.fl0w.start_menu.invoke(self.window)
 				else:
-					sublime.error_message("fl0w can't be opened in your current directory (.no-fl0w file exists)")		
+					sublime.error_message("fl0w can't be opened in your current directory (.no-fl0w file exists)")
 			else:
 				if not self.window.fl0w.connected:
 					self.window.fl0w.start_menu.invoke(self.window)
