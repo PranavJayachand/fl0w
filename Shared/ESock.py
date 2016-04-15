@@ -1,6 +1,7 @@
 import json
 import socket
 import struct
+import gzip
 import DataTypes
 import Logging
 from Utils import capture_trace
@@ -28,12 +29,16 @@ def convert_data(data, data_type):
 
 class ESock:
 	DATA_TYPES = {str : DataTypes.str, dict : DataTypes.json, list : DataTypes.json, bytes : DataTypes.bin, int : DataTypes.int, float : DataTypes.float}
-	
-	def __init__(self, sock, debug=False, disconnect_callback=None):
+
+	def __init__(self, sock, debug=False, disconnect_callback=None, compression_level=0):
 		self._sock = sock
 		self.address, self.port = self._sock.getpeername()
 		self.debug = debug
 		self.disconnect_callback = disconnect_callback
+		self.compression_level = compression_level
+		if debug:
+			Logging.info("compression_level=%i" % compression_level)
+
 
 	def __getattr__(self, attr):
 		if attr == "recv":
@@ -72,7 +77,7 @@ class ESock:
 				return None
 			data += packet
 		try:
-			data = convert_data(data, data_type)
+			data = convert_data(gzip.decompress(data), data_type)
 		except ConvertFailedError:
 			Logging.error("Invalid data type: '%s' ('%s:%d')" % (data_type.decode(), self.address, self.port))
 			if self.disconnect_callback != None:
@@ -94,7 +99,7 @@ class ESock:
 			data_repr = str(data).replace("\n", " ")
 			if len(data_repr) > 80:
 				data_repr = data_repr[:80] + "..."
-			Logging.info("Sending %d-long '%s' on route '%s': %s (%s:%d)" % (length, original_data_type.__name__, route, data_repr, self.address, self.port))		
+			Logging.info("Sending %d-long '%s' on route '%s': %s (%s:%d)" % (length, original_data_type.__name__, route, data_repr, self.address, self.port))
 		route = route.encode()
 		if original_data_type in ESock.DATA_TYPES:
 			data_type = ESock.DATA_TYPES[original_data_type]
@@ -104,6 +109,8 @@ class ESock:
 			data = data.encode()
 		elif original_data_type is dict or original_data_type is list:
 			data = json.dumps(data, separators=(',',':')).encode()
+
+		data = gzip.compress(data, self.compression_level)
 		self.sendall(struct.pack("cQ16s", data_type, len(data), route) + data)
 
 
