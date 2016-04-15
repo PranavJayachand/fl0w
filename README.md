@@ -43,8 +43,12 @@ The Sublime Text client is platform independent, although only OS X and Linux ar
 4. Content of hello_world.c: 
     ```c
     #include <stdio.h>  
-    main() { 
+
+    int main()
+    { 
         printf(“Hello World”);
+
+        return 0;
     } 
     ```
 
@@ -55,7 +59,7 @@ The Sublime Text client is platform independent, although only OS X and Linux ar
     - Use Run
     - Select hello_world
 
-7. Program will now run on the selected Wallaby and output will be piped into the Sublime Text console (View → Show Console)
+7. Program will now run on the selected Wallaby and output will be piped into the Sublime Text console   (View → Show Console)
 
 ## Credits
 
