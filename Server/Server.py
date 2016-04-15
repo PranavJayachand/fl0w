@@ -23,7 +23,7 @@ class Info(Routing.ServerRoute):
 	def run(self, data, handler):
 		handler.sock.send("Connected ST clients: %d\nConnected Wallabies: %d\nAvaliable routes: %s" % (
 			len(handler.broadcast.channels[Handler.Channels.SUBLIME]),
-			len(handler.broadcast.channels[Handler.Channels.WALLABY]), 
+			len(handler.broadcast.channels[Handler.Channels.WALLABY]),
 			", ".join([route for route in list(handler.routes.keys())])), "info")
 
 
@@ -45,7 +45,7 @@ class StdStream(Routing.ServerRoute):
 class WallabyControl(Routing.ServerRoute):
 	def __init__(self):
 		self.actions_with_params = {"run" : self.run_program}
-		self.actions_without_params = {"disconnect" : self.disconnect, 
+		self.actions_without_params = {"disconnect" : self.disconnect,
 		"reboot" : self.reboot, "shutdown" : self.shutdown, "stop" : self.stop_programs}
 		self.programs = []
 
@@ -93,7 +93,7 @@ class WallabyControl(Routing.ServerRoute):
 
 	def run_program(self, program, wallaby_handler, handler):
 		handler.routes["std_stream"].stream_to.update({wallaby_handler : handler})
-		wallaby_handler.sock.send({"run" : program}, "wallaby_control")		
+		wallaby_handler.sock.send({"run" : program}, "wallaby_control")
 
 
 	def stop_programs(self, wallaby_handler, handler):
@@ -158,9 +158,9 @@ class GetInfo(Routing.ServerRoute):
 				handler.broadcast.add(handler, handler.channel)
 		if "name" in data:
 			handler.name = data["name"]
-		Logging.info("'%s:%d' has identified as a %s client." % (handler.info[0], handler.info[1], 
-			"Sublime Text" if handler.channel == Handler.Channels.SUBLIME else 
-			"Wallaby" if handler.channel == Handler.Channels.WALLABY else 
+		Logging.info("'%s:%d' has identified as a %s client." % (handler.info[0], handler.info[1],
+			"Sublime Text" if handler.channel == Handler.Channels.SUBLIME else
+			"Wallaby" if handler.channel == Handler.Channels.WALLABY else
 			"Unknown (will not subscribe to broadcast)"))
 
 	def start(self, handler):
@@ -179,7 +179,7 @@ class Handler(Server.Handler):
 		self.routes = Routing.create_routes(routes, self)
 		self.name = "Unknown"
 
-		
+
 	def handle(self, data, route):
 		if route in self.routes:
 			self.routes[route].run(data, self)
@@ -213,6 +213,7 @@ config.add(Config.Option("server_address", ("127.0.0.1", 3077)))
 config.add(Config.Option("debug", True, validator=lambda x: True if True or False else False))
 config.add(Config.Option("binary_path", "Binaries", validator=folder_validator))
 config.add(Config.Option("source_path", "Source", validator=folder_validator))
+config.add(Config.Option("compression_level", 0, validator=lambda x: x >= 0 and x <= 9))
 
 try:
 	config = config.read_from_file(CONFIG_PATH)
@@ -220,7 +221,7 @@ except FileNotFoundError:
 	config.write_to_file(CONFIG_PATH)
 	config = config.read_from_file(CONFIG_PATH)
 
-server = Server(config.server_address, debug=config.debug)
+server = Server(config.server_address, debug=config.debug, compression_level=config.compression_level)
 
 broadcast = Broadcast()
 # Populating broadcast channels with all channels defined in Handler.Channels
@@ -234,9 +235,9 @@ s_sync = SyncServer(config.source_path, Handler.Channels.SUBLIME, debug=config.d
 
 try:
 	Logging.header("fl0w server started on '%s:%d'" % (config.server_address[0], config.server_address[1]))
-	server.run(Handler, 
+	server.run(Handler,
 		{"broadcast" : broadcast,
-		"routes" : {"info" : Info(), "wallaby_control" : WallabyControl(), 
+		"routes" : {"info" : Info(), "wallaby_control" : WallabyControl(),
 		"get_info" : GetInfo(), "compile" : compile, "std_stream" : StdStream(),
 		WALLABY_SYNC_ROUTE : w_sync,
 		SUBLIME_SYNC_ROUTE : s_sync}})

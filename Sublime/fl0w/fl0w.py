@@ -157,10 +157,13 @@ class Fl0w:
 	def connect(self, connect_details):
 		connect_details_raw = connect_details
 		connect_details = connect_details.split(":")
+		compression_level = int(sublime.load_settings("fl0w.sublime-settings").get("compression_level"))
+
 		if len(connect_details) == 2:
 			try:
 				# Establish connection to the server
-				self.sock = ESock(socket.create_connection((connect_details[0], int(connect_details[1]))), disconnect_callback=self.invoke_disconnect, debug=False)
+				self.sock = ESock(socket.create_connection((connect_details[0], int(connect_details[1]))),
+				                  disconnect_callback=self.invoke_disconnect, debug=False, compression_level=compression_level)
 				sublime.status_message("Connected to %s:%s." % (connect_details[0], connect_details[1]))
 				# Initialize all routes
 				error_report = Fl0w.ErrorReport()

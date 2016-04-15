@@ -11,7 +11,7 @@ import _thread
 
 
 class Server:
-	def __init__(self, host_port_pair, debug=False):
+	def __init__(self, host_port_pair, debug=False, compression_level=None):
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		try:
 			self.sock.bind(host_port_pair)
@@ -21,13 +21,18 @@ class Server:
 		self.sock.listen(2)
 		self.handlers = []
 		self.debug = debug
+		self.compression_level = compression_level
 
 
 	def run(self, handler, handler_args={}):
 		self.handler = handler
 		while 1:
 			sock, info = self.sock.accept()
-			sock = ESock(sock) if not self.debug else ESock(sock, debug=self.debug)
+			if self.compression_level:
+				sock = ESock(sock, debug=self.debug, compression_level=self.compression_level)
+			else:
+				sock = ESock(sock, debug=self.debug)
+
 			handler = self.handler(sock, info, **handler_args)
 			self.handlers.append(handler)
 			_thread.start_new_thread(self.controller, (handler, ))
@@ -60,11 +65,11 @@ class Server:
 			handler.finish()
 		except Exception:
 			self.print_trace(sock)
-		finally:		
+		finally:
 			if handler in self.handlers:
 				del self.handlers[self.handlers.index(handler)]
 			handler.sock.close()
-	
+
 
 	class Handler:
 		def __init__(self, sock, info, **kwargs):

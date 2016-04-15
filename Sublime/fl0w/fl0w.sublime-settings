@@ -1,3 +1,4 @@
 {
-	"server_address": "" // Last server address
+	"server_address": "", // Last server address
+	"compression_level": 2
 }

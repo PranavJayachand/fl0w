@@ -26,7 +26,7 @@ class WallabyControl(Routing.ClientRoute):
 	def __init__(self, output_unbuffer):
 		self.output_unbuffer = output_unbuffer
 		self.actions_with_params = {"run" : self.run_program}
-		self.actions_without_params = {"disconnect" : self.disconnect, 
+		self.actions_without_params = {"disconnect" : self.disconnect,
 		"reboot" : self.reboot, "shutdown" : self.shutdown, "stop" : self.stop}
 		self.currently_running_program = None
 
@@ -60,7 +60,7 @@ class WallabyControl(Routing.ClientRoute):
 			self.currently_running_program.kill()
 		else:
 			Logging.info("No program started by fl0w.")
-		
+
 
 	def reboot(self, handler):
 		self.disconnect(handler)
@@ -82,7 +82,7 @@ def get_wallaby_hostname():
 class GetInfo(Routing.ClientRoute):
 	def run(self, data, handler):
 		if data == "":
-			handler.sock.send({"type" : CHANNEL, 
+			handler.sock.send({"type" : CHANNEL,
 				"name" : platform.node() if not IS_WALLABY else get_wallaby_hostname()}, "get_info")
 		elif "name" in data:
 			if IS_WALLABY:
@@ -125,6 +125,7 @@ config = Config.Config()
 config.add(Config.Option("server_address", ("127.0.0.1", 3077)))
 config.add(Config.Option("debug", True, validator=lambda x: True if True or False else False))
 config.add(Config.Option("output_unbuffer", "stdbuf"))
+config.add(Config.Option("compression_level", 0, validator=lambda x: x >= 0 and x <= 9))
 
 try:
 	config = config.read_from_file(CONFIG_PATH)
@@ -134,7 +135,7 @@ except FileNotFoundError:
 	exit(1)
 	config = config.read_from_file(CONFIG_PATH)
 
-wallaby_client = WallabyClient(config.server_address, 
+wallaby_client = WallabyClient(config.server_address,
 	{"wallaby_control" : WallabyControl(config.output_unbuffer), "get_info" : GetInfo()},
 	debug=config.debug)
 try:
