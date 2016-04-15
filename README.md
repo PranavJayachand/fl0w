@@ -32,10 +32,6 @@ The Sublime Text client is platform independent, although only OS X and Linux ar
     git clone git@github.com:robot0nfire/fl0w.git
     cd fl0w
 
-For setting up the environment just run:
-
-    ./setup.py
-
 ## Using fl0w
 
 1. Connect to a fl0w server in Sublime Text (Tools → Command Pallet → fl0w: Menu → Connect)
