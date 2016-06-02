@@ -17,7 +17,11 @@ import _thread
 
 CHANNEL = "w"
 IS_WALLABY = is_wallaby()
-PATH = "/home/root/Documents/KISS/bin/" if IS_WALLABY else sys.argv[1]
+PATH = "/home/root/Documents/KISS/bin/" if IS_WALLABY else (sys.argv[1] if len(sys.argv) > 1 else None)
+
+if not PATH:
+	Logging.error("No path specified. (Necessary on simulated Wallaby controllers.)")
+	exit(1)
 
 if not IS_WALLABY:
 	Logging.warning("Binaries that were created for Wallaby Controllers will not run on a simulated Wallaby.")
