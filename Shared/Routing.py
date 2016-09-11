@@ -1,5 +1,3 @@
-import ESock
-
 BROADCAST = 0
 ROUTE = 1
 SOCK = 2
@@ -38,8 +36,6 @@ def create_routes(routes, handler):
 	routes = routes.copy()
 	reverse_routes = {}
 	for prefix in routes:
-		if len(prefix) > ESock.MAX_ROUTE_LENGTH:
-			raise InvalidRouteLength("'%s' is too long (maximum: %d)" % (prefix, ESock.MAX_ROUTE_LENGTH))
 		if type(routes[prefix]) is tuple or type(routes[prefix]) is list:
 			routes[prefix] = routes[prefix][0](**routes[prefix][1])
 		reverse_routes[routes[prefix]] = prefix
@@ -54,3 +50,10 @@ def create_routes(routes, handler):
 			routes[prefix].PATCHED = True
 		routes[prefix].start(handler)
 	return routes
+
+
+def create_exchange_map(routes):
+	exchange_map = {"meta" : -1}
+	for route in range(len(routes)):
+		exchange_map[route] = routes[route]
+	return exchange_map
