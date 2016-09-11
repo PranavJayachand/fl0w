@@ -3,8 +3,6 @@ import Routing
 import Config
 import DataTypes
 
-from Sync import SyncServer
-
 #from .AsyncServer import Server
 from .Broadcast import Broadcast
 
@@ -180,7 +178,7 @@ class Handler(WebSocket):
 
 	INVALID_ROUTE = 1
 	INVALID_METADATA_LAYOUT = 2
-	INVALID_DATA_TYPE
+	INVALID_DATA_TYPE = 3
 
 	class Channels:
 		EDITOR = 1
@@ -251,7 +249,6 @@ class Handler(WebSocket):
 			if len(data_repr) > 80:
 				data_repr = data_repr[:80] + "..."
 			Logging.info("Received %d-long '%s' on route '%s': %s (%s:%d)" % (len(data), type(data).__name__, route, data_repr, self.address, self.port))	
-		# Route needs to be reintroduced
 		self.routes[route].run(data, self)
 		
 			
