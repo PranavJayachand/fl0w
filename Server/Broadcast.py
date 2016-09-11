@@ -10,7 +10,7 @@ class Broadcast:
 		if channel in self.channels:
 			for handler in self.channels[channel]:
 				if not handler in exclude:
-					handler.sock.send(data, route)
+					handler.send(data, route)
 		else:
 			raise Broadcast.ChannelError(channel)
 
