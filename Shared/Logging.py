@@ -5,12 +5,11 @@ from inspect import stack
 from sys import stderr
 from sys import stdout
 
-
 try:
-    import sublime
-    print_fallback = True
+	import sublime
+	print_fallback = True
 except ImportError:
-    print_fallback = False
+	print_fallback = False
 
 # Formatting
 BOLD = "\033[1m"
@@ -57,53 +56,63 @@ LIGHT_BLUE = "\033[94m"
 LIGHT_MAGENTA = "\033[95m"
 LIGHT_CYAN = "\033[96m"
 
+CACHED_MODULES = {}
+
 # If the stack becomes too complex to figure out a caller we go through and assume the first valid module is the caller.
 # This works reasonably well but isn't 100% accurate and will only happen if the caller is a thread.
 def print_out(message, color, file):
-    stack_ = stack()
-    # Interestingly the if statement below is not executed when excepting KeyboardInterrupts. Weird.
-    # To prevent a crash we assume the module's name is 'Unknown'
-    module = "Unknown"
-    if getmodule(stack_[2][0]) == None:
-        for i in stack_[2:]:
-            if getmodule(i[0]) != None:
-                module = getmodule(i[0]).__name__
-    else:
-        module = getmodule(stack_[2][0]).__name__
-    if not print_fallback:
-        print("[%s] %s: %s%s\033[0m" % (strftime("%H:%M:%S"), module, color, message), file=file)
-        file.flush()
-    else:
-        print("[%s] %s: %s" % (strftime("%H:%M:%S"), module, message))
+	stack_ = stack()
+	# Interestingly the if statement below is not executed when excepting KeyboardInterrupts. Weird.
+	# To prevent a crash we assume the module's name is 'Unknown'
+	module = "Unknown"
+	if getmodule(stack_[2][0]) == None:
+		for i in stack_[2:]:
+			if getmodule(i[0]) != None:
+				try:
+					module = CACHED_MODULES[i[0].f_code]
+				except KeyError:
+					module = getmodule(i[0]).__name__
+					CACHED_MODULES[i[0].f_code] = module
+	else:
+		try:
+			module = CACHED_MODULES[stack_[2][0].f_code]
+		except KeyError:
+			module = getmodule(stack_[2][0]).__name__
+			CACHED_MODULES[stack_[2][0].f_code] = module
+	if not print_fallback:
+		print("[%s] %s: %s%s\033[0m" % (strftime("%H:%M:%S"), module, color, message), file=file)
+		file.flush()
+	else:
+		print("[%s] %s: %s" % (strftime("%H:%M:%S"), module, message))
 
 def info(message, color=""):
-    print_out(message, color, stdout)
+	print_out(message, color, stdout)
 
 
 def header(message):
-    print_out(message, MAGENTA, stdout)
+	print_out(message, MAGENTA, stdout)
 
 
 def warning(message):
-    print_out(message, YELLOW, stderr)
+	print_out(message, YELLOW, stderr)
 
 
 def error(message):
-    print_out(message, RED, stderr)
+	print_out(message, RED, stderr)
 
 
 def success(message):
-    print_out(message, GREEN, stdout)
+	print_out(message, GREEN, stdout)
 
 
 if __name__ == "__main__":
-    import sys
-    info("Hi!", color=UNDERLINE+BACKGROUND_GREEN+RED)
-    header("This is a header")
-    warning("This is a warning")    # > stderr
-    error("This is an error")       # > stderr
-    success("Great success!")
-    
+	import sys
+	info("Hi!", color=UNDERLINE+BACKGROUND_GREEN+RED)
+	header("This is a header")
+	warning("This is a warning")    # > stderr
+	error("This is an error")       # > stderr
+	success("Great success!")
+	
 
 
 
