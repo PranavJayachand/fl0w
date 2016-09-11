@@ -1,0 +1,3 @@
+[submodule "Shared/ws4py"]
+	path = Shared/ws4py
+	url = https://github.com/robot0nfire/ws4py.git
