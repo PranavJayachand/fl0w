@@ -13,13 +13,7 @@ class InvalidRouteLength(AttributeError):
 		super(AttributeError, self).__init__(msg)
 
 
-class ServerRoute:
-	REQUIRED = []
-	PATCHED = False
-
-	def __init__(self, **kwargs):
-		pass
-
+class Route:
 	def run(self, data, handler):
 		pass
 
@@ -27,9 +21,13 @@ class ServerRoute:
 		pass
 
 
-class ClientRoute:
-	def run(self, data, handler):
-		pass
+class ServerRoute(Route):
+	REQUIRED = []
+	PATCHED = False
+
+
+class ClientRoute(Route):
+	pass
 
 
 def create_routes(routes, handler):
@@ -48,12 +46,25 @@ def create_routes(routes, handler):
 				elif required == ROUTE:
 					routes[prefix].route = reverse_routes[routes[prefix]]
 			routes[prefix].PATCHED = True
-		routes[prefix].start(handler)
 	return routes
 
 
+def launch_routes(created_routes, handler):
+	for prefix in created_routes:
+		created_routes[prefix].start(handler)
+
+
 def create_exchange_map(routes):
-	exchange_map = {"meta" : -1}
-	for route in range(len(routes)):
-		exchange_map[route] = routes[route]
+	exchange_map = {-1 : "meta"}
+	exchange_id = 0
+	for route in routes:
+		exchange_map[exchange_id] = route
+		exchange_id += 1
 	return exchange_map
+
+
+def validate_exchange_map(routes):
+	for key in routes:
+		if not type(key) is int and type(routes[key]) is str:
+			return False
+	return True
