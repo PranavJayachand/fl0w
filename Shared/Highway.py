@@ -27,7 +27,7 @@ INVALID_DATA_TYPE = 3
 
 META_ROUTE = "meta"
 
-
+COMPRESSION_LEVEL = 3
 
 
 
@@ -44,8 +44,8 @@ class Metadata:
 
 
 def create_metadata(data_type, converted_route, indexed_dict=False):
-	return struct.pack("bh", 
-		DATA_TYPES[data_type] if not indexed_dict else DATA_TYPES[INDEXED_DICT], 
+	return struct.pack("bh",
+		DATA_TYPES[data_type] if not indexed_dict else DATA_TYPES[INDEXED_DICT],
 		converted_route)
 
 
@@ -62,7 +62,7 @@ def prepare_data(data):
 	return data, original_data_type
 
 
-def pack_message(data, exchange_route, compression_level, 
+def pack_message(data, exchange_route, compression_level,
 	debug=False, indexed_dict=False):
 	data, original_data_type = prepare_data(data)
 	data = gzip.compress(data, compression_level)
@@ -74,7 +74,7 @@ def pack_message(data, exchange_route, compression_level,
 		Logging.info("Packaged '%s' on route '%s': %s" %
 			(original_data_type.__name__, route, data_repr))
 	"""
-	return create_metadata(original_data_type, exchange_route, 
+	return create_metadata(original_data_type, exchange_route,
 		indexed_dict=indexed_dict) + data
 
 
@@ -113,7 +113,7 @@ def convert_data(data, data_type, debug=False):
 
 
 class Shared:
-	def setup(self, routes, compression_level, debug=False):
+	def setup(self, routes, compression_level=COMPRESSION_LEVEL, debug=False):
 		self.routes = routes
 		self.compression_level = compression_level
 		self.address, self.port = self.peer_address
@@ -146,8 +146,8 @@ class Shared:
 
 
 	def patched_send(self, data, route, indexed_dict=False):
-		self.raw_send(pack_message(data, self.reverse_exchange_routes[route], 
-			self.compression_level, debug=self.debug, 
+		self.raw_send(pack_message(data, self.reverse_exchange_routes[route],
+			self.compression_level, debug=self.debug,
 			indexed_dict=indexed_dict), binary=True)
 		if self.debug:
 			data_repr = str(data).replace("\n", " ")
@@ -161,7 +161,7 @@ class Shared:
 
 
 class Server(Shared, WebSocket):
-	def setup(self, routes, compression_level, debug=False):
+	def setup(self, routes, compression_level=COMPRESSION_LEVEL, debug=False):
 		super().setup(routes, compression_level, debug=debug)
 		# Send replacement can't be done in the parent setup method because
 		# both client and server use a method from a different module.
@@ -182,13 +182,13 @@ class Server(Shared, WebSocket):
 
 
 class Client(WebSocketClient, Shared):
-	def setup(self, routes, compression_level, debug=False):
+	def setup(self, routes, compression_level=COMPRESSION_LEVEL, debug=False):
 		super().setup(routes, compression_level, debug=debug)
 		# Send replacement can't be done in the parent setup method because
 		# both client and server use a method from a different module.
 		self.metadata_lock = Lock()
 		self.raw_send = self.send
-		self.send = self.patched_send		
+		self.send = self.patched_send
 		self._received_message = self.received_message
 		self.received_message = self.receive_routes
 
