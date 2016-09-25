@@ -37,6 +37,7 @@ def create_routes(routes, handler):
 		if type(routes[prefix]) is tuple or type(routes[prefix]) is list:
 			routes[prefix] = routes[prefix][0](**routes[prefix][1])
 		reverse_routes[routes[prefix]] = prefix
+	"""
 	for prefix in routes:
 		attrs = dir(routes[prefix])
 		if not routes[prefix].PATCHED:
@@ -46,20 +47,25 @@ def create_routes(routes, handler):
 				elif required == ROUTE:
 					routes[prefix].route = reverse_routes[routes[prefix]]
 			routes[prefix].PATCHED = True
+	"""
 	return routes
 
 
 def launch_routes(created_routes, handler):
 	for prefix in created_routes:
-		created_routes[prefix].start(handler)
+		try:
+			created_routes[prefix].start(handler)
+		except AttributeError:
+			pass
 
 
 def create_exchange_map(routes):
 	exchange_map = {-1 : "meta"}
 	exchange_id = 0
 	for route in routes:
-		exchange_map[exchange_id] = route
-		exchange_id += 1
+		if route != "meta":
+			exchange_map[exchange_id] = route
+			exchange_id += 1
 	return exchange_map
 
 
