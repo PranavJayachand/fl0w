@@ -89,8 +89,6 @@ class StdStream(Routing.ServerRoute):
 
 
 class GetInfo(Routing.ServerRoute):
-	REQUIRED = [Routing.ROUTE]
-
 	EDITOR = "e"
 	WALLABY = "w"
 
@@ -110,7 +108,7 @@ class GetInfo(Routing.ServerRoute):
 			"Unknown (will not subscribe to broadcast)"))
 
 	def start(self, handler):
-		handler.send("", self.route)
+		handler.send(None, handler.reverse_routes[self])
 
 
 class Handler(Server):
