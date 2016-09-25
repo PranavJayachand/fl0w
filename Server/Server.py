@@ -31,80 +31,7 @@ class Info(Routing.ServerRoute):
 			"routes" : list(handler.routes.keys())}, "info")
 
 
-class StdStream(Routing.ServerRoute):
-	def __init__(self):
-		self.stream_to = {}
-
-	def run(self, data, handler):
-		if type(data) is str:
-			if handler in self.stream_to.keys():
-				self.stream_to[handler].send(data, "std_stream")
-		elif type(data) is dict:
-			if handler in self.stream_to.keys():
-				self.stream_to[handler].send(data, "std_stream")
-				del self.stream_to[handler]
-
-
-
-class WallabyControl(Routing.ServerRoute):
-	def __init__(self):
-		self.actions_with_params = {"run" : self.run_program}
-		self.actions_without_params = {"disconnect" : self.disconnect,
-		"reboot" : self.reboot, "shutdown" : self.shutdown, "stop" : self.stop_programs}
-		self.programs = []
-
-
-	def run(self, data, handler):
-		self.programs = []
-		for program in os.listdir(handler.routes[WALLABY_SYNC_ROUTE].folder):
-			if os.path.isdir(handler.routes[WALLABY_SYNC_ROUTE].folder + program):
-				if "botball_user_program" in os.listdir(handler.routes[WALLABY_SYNC_ROUTE].folder + program):
-					self.programs.append(program)
-		if data == "list_wallaby_controllers":
-			wallaby_controllers = {}
-			for wallaby_handler in handler.broadcast.channels[Handler.Channels.WALLABY]:
-				wallaby_controllers["%s:%d" % (wallaby_handler.address, wallaby_handler.port)] = wallaby_handler.name
-			handler.send({"wallaby_controllers" : wallaby_controllers}, "wallaby_control")
-		elif data == "list_programs":
-			handler.send({"programs" : self.programs}, "wallaby_control")
-		elif type(data) is dict:
-			for wallaby_handler in handler.broadcast.channels[Handler.Channels.WALLABY]:
-				address_pair = "%s:%d" % (wallaby_handler.address, wallaby_handler.port)
-				if address_pair in data.keys():
-					if type(data[address_pair]) is list:
-						for action in data[address_pair]:
-							if action in self.actions_without_params.keys():
-								self.actions_without_params[action](wallaby_handler, handler)
-					elif type(data[address_pair]) is dict:
-						for action in data[address_pair]:
-							if action in self.actions_with_params.keys():
-								self.actions_with_params[action](data[address_pair][action], wallaby_handler, handler)
-					return
-			handler.send("Wallaby not connected anymore.", "error_report")
-
-
-	def disconnect(self, wallaby_handler, handler):
-		pass
-
-
-	def reboot(self, wallaby_handler, handler):
-		wallaby_handler.send("reboot", "wallaby_control")
-
-
-	def shutdown(self, wallaby_handler, handler):
-		wallaby_handler.send("shutdown", "wallaby_control")
-
-
-	def run_program(self, program, wallaby_handler, handler):
-		handler.routes["std_stream"].stream_to.update({wallaby_handler : handler})
-		wallaby_handler.send({"run" : program}, "wallaby_control")
-
-
-	def stop_programs(self, wallaby_handler, handler):
-		wallaby_handler.send("stop", "wallaby_control")
-
-
-class Compile(Routing.ServerRoute):
+class Compile:
 	REQUIRED = [Routing.ROUTE]
 	HAS_MAIN = re.compile(r"\w*\s*main\(\)\s*(\{|.*)$")
 
@@ -146,6 +73,21 @@ class Compile(Routing.ServerRoute):
 
 
 
+class StdStream(Routing.ServerRoute):
+	def __init__(self):
+		self.stream_to = {}
+
+	def run(self, data, handler):
+		if type(data) is str:
+			if handler in self.stream_to.keys():
+				self.stream_to[handler].send(data, "std_stream")
+		elif type(data) is dict:
+			if handler in self.stream_to.keys():
+				self.stream_to[handler].send(data, "std_stream")
+				del self.stream_to[handler]
+
+
+
 class GetInfo(Routing.ServerRoute):
 	REQUIRED = [Routing.ROUTE]
 
@@ -178,10 +120,13 @@ class Handler(Server):
 
 	def setup(self, routes, broadcast, compression_level, debug=False):
 		super().setup(routes, compression_level, debug=debug)
-		Logging.info("Handler for '%s:%d' initalised." % (self.address, self.port))
 		self.broadcast = broadcast
 		self.channel = None
 		self.name = "Unknown"
+
+
+	def ready(self):
+		Logging.info("Handler for '%s:%d' ready." % (self.address, self.port))
 
 
 	def closed(self, code, reason):
@@ -189,10 +134,6 @@ class Handler(Server):
 			self.broadcast.remove(self, self.channel)
 		Logging.info("'%s:%d' disconnected." % (self.address, self.port))
 
-	"""
-	def __repr__(self):
-		return "%s: %s:%d" % (self.name, self.address, self.port)
-	"""
 
 
 def folder_validator(folder):
@@ -220,10 +161,6 @@ except FileNotFoundError:
 	config = config.read_from_file(CONFIG_PATH)
 
 
-
-
-#server = Server(config.server_address, debug=config.debug, compression_level=config.compression_level)
-
 broadcast = Broadcast()
 # Populating broadcast channels with all channels defined in Handler.Channels
 for channel in Handler.Channels.__dict__:
@@ -231,18 +168,15 @@ for channel in Handler.Channels.__dict__:
 		broadcast.add_channel(Handler.Channels.__dict__[channel])
 
 compile = Compile(config.source_path, config.binary_path)
-"""
-w_sync = SyncServer(config.binary_path, Handler.Channels.WALLABY, debug=config.debug, deleted_db_path="deleted-w.pickle")
-s_sync = SyncServer(config.source_path, Handler.Channels.SUBLIME, debug=config.debug, deleted_db_path="deleted-s.pickle", modified_hook=compile.compile)
-"""
+
 
 server = make_server(config.server_address[0], config.server_address[1], 
 	server_class=WSGIServer, handler_class=WebSocketWSGIRequestHandler, 
 	app=WebSocketWSGIApplication(handler_cls=Handler, 
 		handler_args={"debug" : config.debug, "broadcast" : broadcast, 
 		"compression_level" : config.compression_level,
-		"routes" : {"info" : Info(), #"wallaby_control" : WallabyControl(),
-		"get_info" : GetInfo(), "compile" : compile, 
+		"routes" : {"info" : Info(),
+		"get_info" : GetInfo(), 
 		"std_stream" : StdStream()}}))
 server.initialize_websockets_manager()
 
@@ -252,17 +186,3 @@ except KeyboardInterrupt:
 	Logging.header("Gracefully shutting down server.")
 	server.server_close()
 	Logging.success("Server shutdown successful.")
-"""
-try:
-	Logging.header("fl0w server started on '%s:%d'" % (config.server_address[0], config.server_address[1]))
-	server.run(Handler,
-		{"broadcast" : broadcast,
-		"routes" : {"info" : Info(), "wallaby_control" : WallabyControl(),
-		"get_info" : GetInfo(), "compile" : compile, "std_stream" : StdStream()}})
-except KeyboardInterrupt:
-	Logging.header("Gracefully shutting down server.")
-	w_sync.stop()
-	s_sync.stop()
-	server.stop()
-	Logging.success("Server shutdown successful.")
-"""
