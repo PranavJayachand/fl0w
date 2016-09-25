@@ -50,17 +50,27 @@ class Meta:
 	def run(self, data, handler):
 		if type(data) is dict:
 			handler.peer_exchange_routes = data
-			Logging.info("Received peer exchange routes: %s" % str(data))
+			Logging.success("Received peer exchange routes: %s" % str(data))
 			handler.peer_reverse_exchange_routes = reverse_dict(handler.peer_exchange_routes)
 			if issubclass(handler.__class__, Client):
 				handler.send(handler.exchange_routes, META_ROUTE, indexed_dict=True)
-			Routing.launch_routes(handler.routes, handler)
 			try:
 				handler.ready()
 			except AttributeError:
 				Logging.warning("Consider to add a ready method to your handler. "
 					"Without one, it's pretty much useless.")
-
+			if handler.debug:
+				Logging.info("Launching routes.")
+			Routing.launch_routes(handler.routes, handler)
+		if type(data) is int:
+			if data == 1:
+				Logging.error("Last route was invalid.")
+			elif data == 2:
+				Logging.error("Last metadata layout was invalid.")
+			elif data == 3:
+				Logging.error("Last data type was invalid.")
+			else:
+				Logging.error("Unknown error code.")
 
 
 def create_metadata(data_type, converted_route, indexed_dict=False):
@@ -146,11 +156,12 @@ class Shared:
 	def patched_opened(self):
 		self.address, self.port = self.peer_address
 		self.routes = Routing.create_routes(self.routes, self)
+		self.reverse_routes = reverse_dict(self.routes)
 		self.exchange_routes = Routing.create_exchange_map(self.routes)
 		self.reverse_exchange_routes = reverse_dict(self.exchange_routes)
 		# Peer routes have not been received yet. As per convention the meta route
 		# has to exist and we need it for our first send to succeed (otherwise it
-		# would fail during route lookup
+		# would fail during route lookup).
 		self.peer_exchange_routes = {-1 : META_ROUTE}
 		self.peer_reverse_exchange_routes = reverse_dict(self.peer_exchange_routes)
 		try:
@@ -178,20 +189,28 @@ class Shared:
 				type(data).__name__ if not metadata.data_type == INDEXED_DICT else "indexed_dict", 
 				route, data_repr, self.address,
 				self.port))
-		self.routes[route].run(data, self)
+		try:
+			self.routes[route].run(data, self)
+		except KeyError:
+			Logging.warning("'%s' does not exist." % route)
 
 
 	def patched_send(self, data, route, indexed_dict=False):
-		self.raw_send(pack_message(data, self.peer_reverse_exchange_routes[route],
-			self.compression_level, debug=self.debug,
-			indexed_dict=indexed_dict), binary=True)
-		if self.debug:
-			data_repr = str(data).replace("\n", " ")
-			if len(data_repr) > 80:
-				data_repr = data_repr[:80] + "..."
-			Logging.info("Sent '%s' on route '%s': %s (%s:%d)" % (
-				type(data).__name__, route, data_repr, self.address,
-				self.port))
+		try:
+			self.raw_send(pack_message(data, 
+				self.peer_reverse_exchange_routes[route],
+				self.compression_level, debug=self.debug,
+				indexed_dict=indexed_dict), binary=True)
+		except KeyError:
+			Logging.error("'%s' is not a valid peer route." % route)
+		else:
+			if self.debug:
+				data_repr = str(data).replace("\n", " ")
+				if len(data_repr) > 80:
+					data_repr = data_repr[:80] + "..."
+				Logging.info("Sent '%s' on route '%s': %s (%s:%d)" % (
+					type(data).__name__, route, data_repr, self.address,
+					self.port))
 
 
 
