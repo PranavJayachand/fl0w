@@ -50,18 +50,20 @@ class Meta:
 	def run(self, data, handler):
 		if type(data) is dict:
 			handler.peer_exchange_routes = data
-			Logging.success("Received peer exchange routes: %s" % str(data))
+			if handler.debug:
+				Logging.success("Received peer exchange routes: %s" % str(data))
 			handler.peer_reverse_exchange_routes = reverse_dict(handler.peer_exchange_routes)
 			if issubclass(handler.__class__, Client):
 				handler.send(handler.exchange_routes, META_ROUTE, indexed_dict=True)
 			try:
 				handler.ready()
 			except AttributeError:
-				Logging.warning("Consider to add a ready method to your handler. "
-					"Without one, it's pretty much useless.")
+				pass
 			if handler.debug:
 				Logging.info("Launching routes.")
 			Routing.launch_routes(handler.routes, handler)
+			if handler.debug:
+				Logging.info("Routes launched.")
 		if type(data) is int:
 			if data == 1:
 				Logging.error("Last route was invalid.")
@@ -87,6 +89,8 @@ def prepare_data(data):
 		data_type = DATA_TYPES[bytes]
 	if original_data_type is str:
 		data = data.encode()
+	elif original_data_type in (int, float):
+		data = str(data).encode()
 	elif original_data_type is dict or original_data_type is list:
 		data = json.dumps(data, separators=(',',':')).encode()
 	elif original_data_type is NoneType:
