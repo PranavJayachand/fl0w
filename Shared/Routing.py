@@ -1,33 +1,9 @@
-BROADCAST = 0
-ROUTE = 1
-SOCK = 2
-
-
-class InvalidRouteSetup(AttributeError):
-	def __init__(self, msg):
-		super(AttributeError, self).__init__(msg)
-
-
-class InvalidRouteLength(AttributeError):
-	def __init__(self, msg):
-		super(AttributeError, self).__init__(msg)
-
-
 class Route:
 	def run(self, data, handler):
 		pass
 
 	def start(self, handler):
 		pass
-
-
-class ServerRoute(Route):
-	REQUIRED = []
-	PATCHED = False
-
-
-class ClientRoute(Route):
-	pass
 
 
 def create_routes(routes, handler):
