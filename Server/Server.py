@@ -2,7 +2,6 @@ import Logging
 import Routing
 import Config
 
-#from .AsyncServer import Server
 from .Broadcast import Broadcast
 
 import json
@@ -19,20 +18,13 @@ from ws4py.server.wsgiutils import WebSocketWSGIApplication
 
 from Highway import Server
 
-"""
-WALLABY_SYNC_ROUTE = "w_sync"
-SUBLIME_SYNC_ROUTE = "s_sync"
-"""
 
-class Info(Routing.ServerRoute):
+class Info(Routing.Route):
 	def run(self, data, handler):
-		handler.send({"editor" : len(handler.broadcast.channels[Handler.Channels.EDITOR]),
-			"wallaby" : len(handler.broadcast.channels[Handler.Channels.WALLABY]),
-			"routes" : list(handler.routes.keys())}, "info")
+		handler.send({"routes" : list(handler.routes.keys())}, "info")
 
 
 class Compile:
-	REQUIRED = [Routing.ROUTE]
 	HAS_MAIN = re.compile(r"\w*\s*main\(\)\s*(\{|.*)$")
 
 	@staticmethod
@@ -69,11 +61,11 @@ class Compile:
 			for line in p.communicate():
 				result += line.decode()
 			if handler != None:
-				handler.send({"failed" : error, "returned" : result, "relpath" : relpath}, self.route)
+				handler.send({"failed" : error, "returned" : result, "relpath" : relpath}, self.handler.reverse_routes[self])
 
 
 
-class StdStream(Routing.ServerRoute):
+class StdStream(Routing.Route):
 	def __init__(self):
 		self.stream_to = {}
 
@@ -88,34 +80,32 @@ class StdStream(Routing.ServerRoute):
 
 
 
-class GetInfo(Routing.ServerRoute):
-	EDITOR = "e"
-	WALLABY = "w"
+class Subscribe(Routing.Route):
+	EDITOR = 1
+	WALLABY = 2
+	WEB = 3
+	CHANNELS = [EDITOR, WALLABY, WEB]
 
 	def run(self, data, handler):
 		if "type" in data:
-			if data["type"] == GetInfo.EDITOR:
-				handler.channel = Handler.Channels.EDITOR
+			if data["type"] == Subscribe.EDITOR:
+				handler.channel = Subscribe.EDITOR
 				handler.broadcast.add(handler, handler.channel)
-			elif data["type"] == GetInfo.WALLABY:
-				handler.channel = Handler.Channels.WALLABY
+			elif data["type"] == Subscribe.WALLABY:
+				handler.channel = Subscribe.Channels.WALLABY
 				handler.broadcast.add(handler, handler.channel)
-		if "name" in data:
-			handler.name = data["name"]
-		Logging.info("'%s:%d' has identified as a %s client." % (handler.info[0], handler.info[1],
-			"Editor" if handler.channel == Handler.Channels.EDITOR else
-			"Wallaby" if handler.channel == Handler.Channels.WALLABY else
-			"Unknown (will not subscribe to broadcast)"))
-
-	def start(self, handler):
-		handler.send(None, handler.reverse_routes[self])
+			elif data["type"] == Subscribe.WEB:
+				handler.channel = Subscribe.Channels.WEB
+				handler.broadcast.add(handler, handler.channel)
+		if handler.debug:
+			Logging.info("'%s:%d' has identified as a %s client." % (handler.info[0], handler.info[1],
+				"Editor" if handler.channel == Subscribe.EDITOR else
+				"Wallaby" if handler.channel == Subscribe.WALLABY else
+				"Web" if handler.channel == Subscribe.WEB else
+				"Unknown (will not subscribe to broadcast)"))
 
 
 class Handler(Server):
-	class Channels:
-		EDITOR = 1
-		WALLABY = 2
-
 	def setup(self, routes, broadcast, compression_level, debug=False):
 		super().setup(routes, compression_level, debug=debug)
 		self.broadcast = broadcast
@@ -161,9 +151,8 @@ except FileNotFoundError:
 
 broadcast = Broadcast()
 # Populating broadcast channels with all channels defined in Handler.Channels
-for channel in Handler.Channels.__dict__:
-	if not channel.startswith("_"):
-		broadcast.add_channel(Handler.Channels.__dict__[channel])
+for channel in Subscribe.CHANNELS:
+	broadcast.add_channel(channel)
 
 compile = Compile(config.source_path, config.binary_path)
 
@@ -174,7 +163,7 @@ server = make_server(config.server_address[0], config.server_address[1],
 		handler_args={"debug" : config.debug, "broadcast" : broadcast, 
 		"compression_level" : config.compression_level,
 		"routes" : {"info" : Info(),
-		"get_info" : GetInfo(), 
+		"subscribe" : Subscribe(), 
 		"std_stream" : StdStream()}}))
 server.initialize_websockets_manager()
 
