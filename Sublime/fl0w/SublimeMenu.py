@@ -1,5 +1,8 @@
+FUNCTION = type(lambda: 1)
+
 class Input:
-	def __init__(self, caption, initial_text="", on_done=None, on_change=None, on_cancel=None):
+	def __init__(self, caption, initial_text="", on_done=None, on_change=None, 
+			on_cancel=None):
 		self.caption = caption
 		self.initial_text = initial_text
 		self.on_done = on_done
@@ -13,7 +16,8 @@ class Input:
 
 
 class Entry:
-	def __init__(self, name, description="", action=None, kwargs={}, sub_menu=None, input=None):
+	def __init__(self, name, description="", action=None, kwargs={}, 
+			sub_menu=None, input=None):
 		self.name = name
 		self.description = description
 		self.action = action
@@ -61,8 +65,11 @@ class Menu:
 				entry.action(**entry.kwargs) 
 			if entry.input != None:
 				entry.input.invoke(self.window)
-			if entry.sub_menu != None:
+			if type(entry.sub_menu) is FUNCTION:
+				entry.sub_menu(entry).invoke(self.window, back=self)
+			elif entry.sub_menu != None
 				entry.sub_menu.invoke(self.window, back=self)
+
 
 	@property
 	def menu_entries(self):
@@ -71,17 +78,39 @@ class Menu:
 			entries.append([self.entries[entry_id].name, self.entries[entry_id].description])
 		return entries
 					
+					
+	def __add__(self, other):
+		try:
+			self.add(other)
+		except TypeError:
+			return NotImplemented
+		return self
+
+
+	def __sub__(self, other):
+		try:
+			self.remove(other)
+		except TypeError:
+			return NotImplemented
+		return self
+
 
 	def add(self, entry):
-		if len(self.entries) > 0:
-			entry_id = tuple(self.entries.keys())[-1] + 1
+		if entry.__class__ == Entry:
+			if len(self.entries) > 0:
+				entry_id = tuple(self.entries.keys())[-1] + 1
+			else:
+				entry_id = 0
+			self.entries[entry_id] = entry
 		else:
-			entry_id = 0
-		self.entries[entry_id] = entry
+			raise TypeError("invalid type supplied")
 
 
 	def remove(self, entry):
-		if entry in self.entries.values():
-			for entry_id in self.entries:
-				if self.entries[entry_id] == entry:
-					del self.entries[entry_id]
+		if entry.__class__ == Entry:		
+			if entry in self.entries.values():
+				for entry_id in self.entries:
+					if self.entries[entry_id] == entry:
+						del self.entries[entry_id]
+		else:
+			raise TypeError("invalid type supplied")
