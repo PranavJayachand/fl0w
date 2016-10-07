@@ -50,7 +50,7 @@ class Fl0wClient(Client):
 		Logging.info("Connection closed: %s (%s)" % (reason, code))
 
 
-	class Info(Routing.ClientRoute):
+	class Info(Routing.Route):
 		def run(self, data, handler):
 			info = ""
 			for key in data:
