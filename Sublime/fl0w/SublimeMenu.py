@@ -1,7 +1,7 @@
 FUNCTION = type(lambda: 1)
 
 class Input:
-	def __init__(self, caption, initial_text="", on_done=None, on_change=None, 
+	def __init__(self, caption, initial_text="", on_done=None, on_change=None,
 			on_cancel=None):
 		self.caption = caption
 		self.initial_text = initial_text
@@ -11,12 +11,12 @@ class Input:
 
 
 	def invoke(self, window):
-		window.show_input_panel(self.caption, self.initial_text, 
+		window.show_input_panel(self.caption, self.initial_text,
 			self.on_done, self.on_change, self.on_cancel)
 
 
 class Entry:
-	def __init__(self, name, description="", action=None, kwargs={}, 
+	def __init__(self, name, description="", action=None, kwargs={},
 			sub_menu=None, input=None):
 		self.name = name
 		self.description = description
@@ -47,8 +47,8 @@ class Menu:
 		if not self.subtitles:
 			for entry_index in range(len(entries)):
 				del entries[entry_index][1]
-		window.show_quick_panel(entries, self._action, 
-			flags=0, selected_index=self.selected_index, 
+		window.show_quick_panel(entries, self._action,
+			flags=0, selected_index=self.selected_index,
 			on_highlight=self.on_highlight)
 
 	def _action(self, entry_id):
@@ -62,12 +62,12 @@ class Menu:
 			else:
 				entry = self.entries[entry_id]
 			if entry.action != None:
-				entry.action(**entry.kwargs) 
+				entry.action(**entry.kwargs)
 			if entry.input != None:
 				entry.input.invoke(self.window)
 			if type(entry.sub_menu) is FUNCTION:
 				entry.sub_menu(entry).invoke(self.window, back=self)
-			elif entry.sub_menu != None
+			elif entry.sub_menu != None:
 				entry.sub_menu.invoke(self.window, back=self)
 
 
@@ -77,8 +77,8 @@ class Menu:
 		for entry_id in self.entries:
 			entries.append([self.entries[entry_id].name, self.entries[entry_id].description])
 		return entries
-					
-					
+
+
 	def __add__(self, other):
 		try:
 			self.add(other)
@@ -107,7 +107,7 @@ class Menu:
 
 
 	def remove(self, entry):
-		if entry.__class__ == Entry:		
+		if entry.__class__ == Entry:
 			if entry in self.entries.values():
 				for entry_id in self.entries:
 					if self.entries[entry_id] == entry:
