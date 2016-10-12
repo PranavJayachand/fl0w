@@ -29,10 +29,8 @@ INVALID_METADATA_LAYOUT = 2
 INVALID_DATA_TYPE = 3
 
 META_ROUTE = "meta"
-
 COMPRESSION_LEVEL = 3
-
-
+PACK_FORMAT = "Bh"
 
 
 class ConvertFailedError(ValueError):
@@ -76,7 +74,7 @@ class Meta:
 
 
 def create_metadata(data_type, converted_route, indexed_dict=False):
-	return struct.pack("bh",
+	return struct.pack(PACK_FORMAT,
 		DATA_TYPES[data_type] if not indexed_dict else DATA_TYPES[INDEXED_DICT],
 		converted_route)
 
@@ -108,7 +106,7 @@ def pack_message(data, exchange_route, compression_level,
 
 
 def parse_metadata(message):
-	metadata = struct.unpack("bh", message[:4])
+	metadata = struct.unpack(PACK_FORMAT, message[:4])
 	return Metadata(metadata[0], metadata[1])
 
 
@@ -190,7 +188,7 @@ class Shared:
 			if len(data_repr) > 80:
 				data_repr = data_repr[:80] + "..."
 			Logging.info("Received '%s' on route '%s': %s (%s:%d)" % (
-				type(data).__name__ if not metadata.data_type == INDEXED_DICT else "indexed_dict", 
+				type(data).__name__ if not metadata.data_type == INDEXED_DICT else "indexed_dict",
 				route, data_repr, self.address,
 				self.port))
 		try:
@@ -201,7 +199,7 @@ class Shared:
 
 	def patched_send(self, data, route, indexed_dict=False):
 		try:
-			self.raw_send(pack_message(data, 
+			self.raw_send(pack_message(data,
 				self.peer_reverse_exchange_routes[route],
 				self.compression_level, debug=self.debug,
 				indexed_dict=indexed_dict), binary=True)
