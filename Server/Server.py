@@ -106,8 +106,8 @@ class Subscribe(Routing.Route):
 
 
 class Handler(Server):
-	def setup(self, routes, broadcast, compression_level, debug=False):
-		super().setup(routes, compression_level, debug=debug)
+	def setup(self, routes, broadcast, debug=False):
+		super().setup(routes, debug=debug)
 		self.broadcast = broadcast
 		self.channel = None
 		self.name = "Unknown"
@@ -140,7 +140,6 @@ config.add(Config.Option("server_address", ("127.0.0.1", 3077)))
 config.add(Config.Option("debug", True, validator=lambda x: True if True or False else False))
 config.add(Config.Option("binary_path", "Binaries", validator=folder_validator))
 config.add(Config.Option("source_path", "Source", validator=folder_validator))
-config.add(Config.Option("compression_level", 0, validator=lambda x: x >= 0 and x <= 9))
 
 try:
 	config = config.read_from_file(CONFIG_PATH)
@@ -161,7 +160,6 @@ server = make_server(config.server_address[0], config.server_address[1],
 	server_class=WSGIServer, handler_class=WebSocketWSGIRequestHandler, 
 	app=WebSocketWSGIApplication(handler_cls=Handler, 
 		handler_args={"debug" : config.debug, "broadcast" : broadcast, 
-		"compression_level" : config.compression_level,
 		"routes" : {"info" : Info(),
 		"subscribe" : Subscribe(), 
 		"std_stream" : StdStream()}}))
