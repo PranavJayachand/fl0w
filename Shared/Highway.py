@@ -29,7 +29,6 @@ INVALID_METADATA_LAYOUT = 2
 INVALID_DATA_TYPE = 3
 
 META_ROUTE = "meta"
-COMPRESSION_LEVEL = 3
 PACK_FORMAT = "Bh"
 
 
@@ -96,10 +95,9 @@ def prepare_data(data):
 	return data, original_data_type
 
 
-def pack_message(data, exchange_route, compression_level,
+def pack_message(data, exchange_route,
 	debug=False, indexed_dict=False):
 	data, original_data_type = prepare_data(data)
-	data = gzip.compress(data, compression_level)
 	return create_metadata(original_data_type, exchange_route,
 		indexed_dict=indexed_dict) + data
 
@@ -111,7 +109,7 @@ def parse_metadata(message):
 
 
 def parse_message(data, data_type):
-	data = convert_data(gzip.decompress(data[4:]), data_type)
+	data = convert_data(data[4:], data_type)
 	return data
 
 
@@ -141,10 +139,9 @@ def convert_data(data, data_type, debug=False):
 
 
 class Shared:
-	def setup(self, routes, compression_level=COMPRESSION_LEVEL, debug=False):
+	def setup(self, routes, debug=False):
 		self.routes = routes
 		self.routes["meta"] = Meta()
-		self.compression_level = compression_level
 		self.debug = debug
 
 
@@ -201,8 +198,8 @@ class Shared:
 		try:
 			self.raw_send(pack_message(data,
 				self.peer_reverse_exchange_routes[route],
-				self.compression_level, debug=self.debug,
-				indexed_dict=indexed_dict), binary=True)
+				debug=self.debug, indexed_dict=indexed_dict), 
+			binary=True)
 		except KeyError:
 			Logging.error("'%s' is not a valid peer route." % route)
 		else:
@@ -217,8 +214,8 @@ class Shared:
 
 
 class Server(WebSocket, Shared):
-	def setup(self, routes, compression_level=COMPRESSION_LEVEL, debug=False):
-		super().setup(routes, compression_level, debug=debug)
+	def setup(self, routes, debug=False):
+		super().setup(routes, debug=debug)
 		self.override_methods()
 
 
@@ -227,6 +224,6 @@ class Server(WebSocket, Shared):
 
 
 class Client(WebSocketClient, Shared):
-	def setup(self, routes, compression_level=COMPRESSION_LEVEL, debug=False):
-		super().setup(routes, compression_level, debug=debug)
+	def setup(self, routes, debug=False):
+		super().setup(routes, debug=debug)
 		self.override_methods()
