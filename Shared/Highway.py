@@ -29,7 +29,9 @@ INVALID_METADATA_LAYOUT = 2
 INVALID_DATA_TYPE = 3
 
 META_ROUTE = "meta"
-PACK_FORMAT = "Bh"
+META_ROUTE_INDEX = 0
+
+PACK_FORMAT = "BH"
 
 
 class ConvertFailedError(ValueError):
@@ -161,7 +163,7 @@ class Shared:
 		# Peer routes have not been received yet. As per convention the meta route
 		# has to exist and we need it for our first send to succeed (otherwise it
 		# would fail during route lookup).
-		self.peer_exchange_routes = {-1 : META_ROUTE}
+		self.peer_exchange_routes = {META_ROUTE_INDEX : META_ROUTE}
 		self.peer_reverse_exchange_routes = reverse_dict(self.peer_exchange_routes)
 		try:
 			self.post_opened()

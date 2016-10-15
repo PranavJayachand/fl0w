@@ -36,8 +36,8 @@ def launch_routes(created_routes, handler):
 
 
 def create_exchange_map(routes):
-	exchange_map = {-1 : "meta"}
-	exchange_id = 0
+	exchange_map = {0 : "meta"}
+	exchange_id = 1
 	for route in routes:
 		if route != "meta":
 			exchange_map[exchange_id] = route
