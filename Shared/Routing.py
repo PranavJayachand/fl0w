@@ -6,24 +6,11 @@ class Route:
 		pass
 
 
-def create_routes(routes, handler):
+def create_routes(routes):
 	routes = routes.copy()
-	reverse_routes = {}
 	for prefix in routes:
 		if type(routes[prefix]) is tuple or type(routes[prefix]) is list:
 			routes[prefix] = routes[prefix][0](**routes[prefix][1])
-		reverse_routes[routes[prefix]] = prefix
-	"""
-	for prefix in routes:
-		attrs = dir(routes[prefix])
-		if not routes[prefix].PATCHED:
-			for required in routes[prefix].REQUIRED:
-				if required == BROADCAST:
-					routes[prefix].broadcast = handler.broadcast
-				elif required == ROUTE:
-					routes[prefix].route = reverse_routes[routes[prefix]]
-			routes[prefix].PATCHED = True
-	"""
 	return routes
 
 
