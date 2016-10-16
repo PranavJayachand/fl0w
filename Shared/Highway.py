@@ -32,17 +32,12 @@ META_ROUTE = "meta"
 META_ROUTE_INDEX = 0
 
 PACK_FORMAT = "BH"
+METADATA_LENGTH = struct.calcsize(PACK_FORMAT)
 
 
 class ConvertFailedError(ValueError):
 	def __init__(self):
 		super(ValueError, self).__init__("conversion failed (invalid data type supplied)")
-
-
-class Metadata:
-	def __init__(self, data_type, m_route):
-		self.data_type = REVERSE_DATA_TYPES[data_type]
-		self.m_route = m_route
 
 
 class Meta:
@@ -82,10 +77,6 @@ def create_metadata(data_type, converted_route, indexed_dict=False):
 
 def prepare_data(data):
 	original_data_type = type(data)
-	if original_data_type in DATA_TYPES:
-		data_type = DATA_TYPES[original_data_type]
-	else:
-		data_type = DATA_TYPES[bytes]
 	if original_data_type is str:
 		data = data.encode()
 	elif original_data_type in (int, float):
@@ -107,12 +98,7 @@ def pack_message(data, exchange_route,
 
 def parse_metadata(message):
 	metadata = struct.unpack(PACK_FORMAT, message[:4])
-	return Metadata(metadata[0], metadata[1])
-
-
-def parse_message(data, data_type):
-	data = convert_data(data[4:], data_type)
-	return data
+	return REVERSE_DATA_TYPES[metadata[0]], metadata[1]
 
 
 def convert_data(data, data_type, debug=False):
@@ -144,6 +130,15 @@ class Shared:
 	def setup(self, routes, debug=False):
 		self.routes = routes
 		self.routes["meta"] = Meta()
+		self.routes = Routing.create_routes(self.routes)
+		self.reverse_routes = reverse_dict(self.routes)
+		self.exchange_routes = Routing.create_exchange_map(self.routes)
+		self.reverse_exchange_routes = reverse_dict(self.exchange_routes)
+		# Peer routes have not been received yet. As per convention the meta route
+		# has to exist and we need it for our first send to succeed (otherwise it
+		# would fail during route lookup).
+		self.peer_exchange_routes = {META_ROUTE_INDEX : META_ROUTE}
+		self.peer_reverse_exchange_routes = reverse_dict(self.peer_exchange_routes)
 		self.debug = debug
 
 
@@ -156,15 +151,6 @@ class Shared:
 
 	def patched_opened(self):
 		self.address, self.port = self.peer_address
-		self.routes = Routing.create_routes(self.routes, self)
-		self.reverse_routes = reverse_dict(self.routes)
-		self.exchange_routes = Routing.create_exchange_map(self.routes)
-		self.reverse_exchange_routes = reverse_dict(self.exchange_routes)
-		# Peer routes have not been received yet. As per convention the meta route
-		# has to exist and we need it for our first send to succeed (otherwise it
-		# would fail during route lookup).
-		self.peer_exchange_routes = {META_ROUTE_INDEX : META_ROUTE}
-		self.peer_reverse_exchange_routes = reverse_dict(self.peer_exchange_routes)
 		try:
 			self.post_opened()
 		except AttributeError:
@@ -173,21 +159,22 @@ class Shared:
 
 	def patched_received_message(self, message):
 		message = message.data
-		metadata = parse_metadata(message)
+		print(message)
+		data_type, m_route = parse_metadata(message)
 		try:
-			route = self.exchange_routes[metadata.m_route]
+			route = self.exchange_routes[m_route]
 		except KeyError:
-			self.send(Handler.INVALID_ROUTE, META_ROUTE)
+			self.send(INVALID_ROUTE, META_ROUTE)
 			Logging.error("Received message with non-existing route '%d' from '%s:%d'" % (
-				metadata.m_route, self.address, self.port))
+				m_route, self.address, self.port))
 			return
-		data = parse_message(message, metadata.data_type)
+		data = convert_data(message[METADATA_LENGTH:], data_type)
 		if self.debug:
 			data_repr = str(data).replace("\n", " ")
 			if len(data_repr) > 80:
 				data_repr = data_repr[:80] + "..."
 			Logging.info("Received '%s' on route '%s': %s (%s:%d)" % (
-				type(data).__name__ if not metadata.data_type == INDEXED_DICT else "indexed_dict",
+				type(data).__name__ if not data_type == INDEXED_DICT else "indexed_dict",
 				route, data_repr, self.address,
 				self.port))
 		try:
