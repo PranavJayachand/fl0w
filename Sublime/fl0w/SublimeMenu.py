@@ -109,8 +109,11 @@ class Menu:
 	def remove(self, entry):
 		if entry.__class__ == Entry:
 			if entry in self.entries.values():
+				found_entry_id = None
 				for entry_id in self.entries:
 					if self.entries[entry_id] == entry:
-						del self.entries[entry_id]
+						found_entry_id = entry_id
+				if found_entry_id != None:
+					del self.entries[entry_id]
 		else:
 			raise TypeError("invalid type supplied")
