@@ -1,6 +1,5 @@
 import Logging
 import gzip
-import Routing
 import struct
 import json
 from Utils import capture_trace
@@ -35,12 +34,53 @@ PACK_FORMAT = "BH"
 METADATA_LENGTH = struct.calcsize(PACK_FORMAT)
 
 
+class Route:
+	def run(self, data, handler):
+		pass
+
+	def start(self, handler):
+		pass
+
+
+def create_routes(routes):
+	routes = routes.copy()
+	for prefix in routes:
+		if type(routes[prefix]) is tuple or type(routes[prefix]) is list:
+			routes[prefix] = routes[prefix][0](**routes[prefix][1])
+	return routes
+
+
+def launch_routes(created_routes, handler):
+	for prefix in created_routes:
+		try:
+			created_routes[prefix].start(handler)
+		except AttributeError:
+			pass
+
+
+def create_exchange_map(routes):
+	exchange_map = {0 : "meta"}
+	exchange_id = 1
+	for route in routes:
+		if route != "meta":
+			exchange_map[exchange_id] = route
+			exchange_id += 1
+	return exchange_map
+
+
+def validate_exchange_map(routes):
+	for key in routes:
+		if not type(key) is int and type(routes[key]) is str:
+			return False
+	return True
+
+
 class ConvertFailedError(ValueError):
 	def __init__(self):
 		super(ValueError, self).__init__("conversion failed (invalid data type supplied)")
 
 
-class Meta:
+class Meta(Route):
 	def run(self, data, handler):
 		if type(data) is dict:
 			handler.peer_exchange_routes = data
@@ -55,7 +95,7 @@ class Meta:
 				pass
 			if handler.debug:
 				Logging.info("Launching routes.")
-			Routing.launch_routes(handler.routes, handler)
+			launch_routes(handler.routes, handler)
 			if handler.debug:
 				Logging.info("Routes launched.")
 		if type(data) is int:
@@ -97,14 +137,19 @@ def pack_message(data, exchange_route,
 
 
 def parse_metadata(message):
-	metadata = struct.unpack(PACK_FORMAT, message[:4])
+	metadata = struct.unpack(PACK_FORMAT, message[:METADATA_LENGTH])
 	return REVERSE_DATA_TYPES[metadata[0]], metadata[1]
 
 
 def convert_data(data, data_type, debug=False):
 	try:
 		if data_type == str:
-			data = data.decode()
+			try:
+				data = data.decode()
+			except UnicodeDecodeError:
+				Logging.warning("Unicode characters are not properly encoded. "
+					"Falling back to unicode_escape.")
+				data = data.decode("unicode_escape")
 		elif data_type == int:
 			data = int(data.decode())
 		elif data_type == float:
@@ -130,9 +175,9 @@ class Shared:
 	def setup(self, routes, debug=False):
 		self.routes = routes
 		self.routes["meta"] = Meta()
-		self.routes = Routing.create_routes(self.routes)
+		self.routes = create_routes(self.routes)
 		self.reverse_routes = reverse_dict(self.routes)
-		self.exchange_routes = Routing.create_exchange_map(self.routes)
+		self.exchange_routes = create_exchange_map(self.routes)
 		self.reverse_exchange_routes = reverse_dict(self.exchange_routes)
 		# Peer routes have not been received yet. As per convention the meta route
 		# has to exist and we need it for our first send to succeed (otherwise it
@@ -159,7 +204,6 @@ class Shared:
 
 	def patched_received_message(self, message):
 		message = message.data
-		print(message)
 		data_type, m_route = parse_metadata(message)
 		try:
 			route = self.exchange_routes[m_route]
