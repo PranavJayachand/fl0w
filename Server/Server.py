@@ -1,5 +1,4 @@
 import Logging
-import Routing
 import Config
 
 from .Broadcast import Broadcast
@@ -16,10 +15,10 @@ from wsgiref.simple_server import make_server
 from ws4py.server.wsgirefserver import WSGIServer, WebSocketWSGIRequestHandler
 from ws4py.server.wsgiutils import WebSocketWSGIApplication
 
-from Highway import Server
+from Highway import Server, Route
 
 
-class Info(Routing.Route):
+class Info(Route):
 	def run(self, data, handler):
 		handler.send({"routes" : list(handler.routes.keys())}, "info")
 
@@ -65,7 +64,7 @@ class Compile:
 
 
 
-class StdStream(Routing.Route):
+class StdStream(Route):
 	def __init__(self):
 		self.stream_to = {}
 
@@ -80,7 +79,7 @@ class StdStream(Routing.Route):
 
 
 
-class Subscribe(Routing.Route):
+class Subscribe(Route):
 	EDITOR = 1
 	WALLABY = 2
 	WEB = 3
