@@ -17,8 +17,7 @@ from watchdog.events import FileSystemEventHandler
 import sublime
 import sublime_plugin
 
-from Highway import Client
-import Routing
+from Highway import Client, Route
 
 from SublimeMenu import *
 import Logging
@@ -26,6 +25,7 @@ import Logging
 import webbrowser
 
 CHANNEL = 1
+FL0W_STATUS = "fl0w"
 
 def plugin_unloaded():
 	for window in windows:
@@ -42,42 +42,88 @@ class Fl0wClient(Client):
 
 	def ready(self):
 		self.fl0w.connected = True
-		Logging.info("Connection ready!")
+		if self.fl0w.debug:
+			Logging.info("Connection ready!")
 
 
 	def closed(self, code, reason):
 		self.fl0w.connected = False
-		Logging.info("Connection closed: %s (%s)" % (reason, code))
+		if self.fl0w.debug:
+			Logging.info("Connection closed: %s (%s)" % (reason, code))
 
 
-	class Info(Routing.Route):
+	class Info(Route):
 		def run(self, data, handler):
 			info = ""
 			for key in data:
 				info += "%s: %s\n" % (key.capitalize(), ", ".join(data[key]))
 			sublime.message_dialog(info)
-			handler.fl0w.invoke_main_menu()
+			handler.fl0w.meta.invoke(handler.fl0w.window, back=handler.fl0w.main_menu)
 
 
 
 
 
 class Fl0w:
-	def __init__(self, window):
+	def __init__(self, window, debug=False):
 		self.connected = False
 		self.window = window
 		self.folder = window.folders()[0]
+		self._debug = debug
 
 
 		self.start_menu = Menu()
-		self.start_menu.add(Entry("Connect", "Connect to a fl0w server", action=self.invoke_connect))
-		self.start_menu.add(Entry("About", "Information about fl0w", action=self.invoke_about))
+		self.start_menu += Entry("Connect", "Connect to a fl0w server", 
+			action=self.invoke_connect)
+		self.start_menu += Entry("About", "Information about fl0w", 
+			action=self.invoke_about)
 
+		self.debug_menu = Menu(subtitles=False)
+		self.debug_menu += Entry("On", 
+			action=lambda: self.set_debug(True))
+		self.debug_menu += Entry("Off", 
+			action=lambda: self.set_debug(False))
+
+		self.settings = Menu()
+		self.settings += Entry("Debug", "Toggle debug mode", 
+			sub_menu=self.debug_menu)
+
+		self.meta = Menu()
+		self.meta += Entry("Info", "Server info", 
+			action=lambda: self.ws.send(None, "info"))
+		self.meta_entry = Entry("Meta", "Debug information about fl0w", 
+			sub_menu=self.meta)
+		if self.debug:	
+			self.main_menu += self.meta_entry
+		
+		
 		self.main_menu = Menu()
-		#self.main_menu.add(Entry("Wallaby Control", "Control a connected Wallaby", action=self.invoke_wallaby_control))
-		self.main_menu.add(Entry("Info", "Server info", action=lambda: self.ws.send(None, "info")))
-		#self.main_menu.add(Entry("Debug", "Debug options", action=self.invoke_debug_options))
-		self.main_menu.add(Entry("Disconnect", "Disconnect from server", action=self.invoke_disconnect))
+		self.main_menu += Entry("Settings", "General purpose settings", 
+			sub_menu=self.settings)
+		self.main_menu += Entry("Disconnect", "Disconnect from server", 
+			action=self.invoke_disconnect)
+		
+
+	@property
+	def debug(self):
+		return self._debug
+
+
+	def set_debug(self, debug):
+		self.debug = debug
+
+
+	@debug.setter
+	def debug(self, debug):
+		if debug:
+			self._debug = True
+			if not self.meta_entry in self.main_menu.entries.values():
+				self.main_menu += self.meta_entry
+		else:
+			self._debug = False
+			self.main_menu -= self.meta_entry
+		self.window.active_view().set_status(FL0W_STATUS, 
+			"Debug set to %s" % self._debug)
 
 
 	def invoke_start_menu(self):
@@ -95,7 +141,6 @@ class Fl0w:
 
 
 	def connect(self, connect_details):
-		compression_level = int(sublime.load_settings("fl0w.sublime-settings").get("compression_level"))
 		try:
 			self.ws = Fl0wClient('ws://%s' % connect_details)
 			self.ws.setup({"info" : Fl0wClient.Info()}, self, debug=False)
@@ -114,7 +159,8 @@ class Fl0w:
 	def invoke_disconnect(self):
 		if self.connected:
 			self.ws.close()
-			sublime.message_dialog("Connection closed ('%s')" % self.folder)
+			self.window.active_view().set_status(FL0W_STATUS, 
+				"Connection closed ('%s')" % self.folder)
 
 
 
@@ -154,8 +200,7 @@ class Fl0wCommand(sublime_plugin.WindowCommand):
 		else:
 			if hasattr(self.window, "fl0w"):
 				sublime.error_message("Window setup was invalidated (Don't close or open any additional folders in a fl0w window)")
-				if self.window.fl0w.connected:
-					self.window.fl0w.invoke_disconnect()
+				self.window.fl0w.invoke_disconnect()
 
 
 
