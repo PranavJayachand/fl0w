@@ -104,13 +104,31 @@ class Subscribe(Route):
 				"Unknown (will not subscribe to broadcast)"))
 
 
+class Peers(Route):
+	def run(self, data, handler):
+		out = {}
+		check_type = False
+		if type(data) is dict:
+			if "type" in data:
+				check_type = True
+		peers = handler.peers
+		for peer_id in peers:
+			if not check_type or peers[peer_id].channel in data["type"]:
+				peer = peers[peer_id]
+				if peer is not handler:
+					out[peer_id] = {"name" : peer.name, 
+					"address" : peer.address, "port" : peer.port, 
+					"type" : peer.channel}			
+		handler.send(out, handler.reverse_routes[self])
+
+
 class Handler(Server):
-	def setup(self, routes, broadcast, debug=False):
-		super().setup(routes, debug=debug)
+	def setup(self, routes, broadcast, websockets, debug=False):
+		super().setup(routes, websockets, debug=debug)
 		self.broadcast = broadcast
 		self.channel = None
 		self.name = "Unknown"
-
+		
 
 	def ready(self):
 		Logging.info("Handler for '%s:%d' ready." % (self.address, self.port))
@@ -148,7 +166,7 @@ except FileNotFoundError:
 
 
 broadcast = Broadcast()
-# Populating broadcast channels with all channels defined in Handler.Channels
+# Populating broadcast channels with all channels defined in Subscribe.Channels
 for channel in Subscribe.CHANNELS:
 	broadcast.add_channel(channel)
 
@@ -156,13 +174,18 @@ compile = Compile(config.source_path, config.binary_path)
 
 
 server = make_server(config.server_address[0], config.server_address[1], 
-	server_class=WSGIServer, handler_class=WebSocketWSGIRequestHandler, 
-	app=WebSocketWSGIApplication(handler_cls=Handler, 
+	server_class=WSGIServer, handler_class=WebSocketWSGIRequestHandler,
+	app=None)
+server.initialize_websockets_manager()
+
+server.set_app(WebSocketWSGIApplication(handler_cls=Handler, 
 		handler_args={"debug" : config.debug, "broadcast" : broadcast, 
+		"websockets" : server.manager.websockets,
 		"routes" : {"info" : Info(),
 		"subscribe" : Subscribe(), 
-		"std_stream" : StdStream()}}))
-server.initialize_websockets_manager()
+		"std_stream" : StdStream(),
+		"peers" : Peers()}}))
+
 
 try:
 	server.serve_forever()
