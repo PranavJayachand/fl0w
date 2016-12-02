@@ -2,17 +2,34 @@ FUNCTION = type(lambda: 1)
 
 class Input:
 	def __init__(self, caption, initial_text="", on_done=None, on_change=None,
-			on_cancel=None):
+			on_cancel=None, kwargs={}):
 		self.caption = caption
 		self.initial_text = initial_text
 		self.on_done = on_done
 		self.on_change = on_change
 		self.on_cancel = on_cancel
+		self.kwargs = kwargs
+
+
+	def wrapped_on_done(self, input_):
+		if not self.on_done == None:
+			self.on_done(input_, **self.kwargs)
+
+
+	def wrapped_on_change(self, input_):
+		if not self.on_change == None:		
+			self.on_change(input_, **self.kwargs)
+
+
+	def wrapped_on_cancel(self):
+		if not self.on_cancel == None:		
+			self.on_cancel(**self.kwargs)
 
 
 	def invoke(self, window):
 		window.show_input_panel(self.caption, self.initial_text,
-			self.on_done, self.on_change, self.on_cancel)
+			self.wrapped_on_done, self.wrapped_on_change, 
+			self.wrapped_on_cancel)
 
 
 class Entry:
