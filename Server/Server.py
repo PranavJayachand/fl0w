@@ -15,7 +15,7 @@ from wsgiref.simple_server import make_server
 from ws4py.server.wsgirefserver import WSGIServer, WebSocketWSGIRequestHandler
 from ws4py.server.wsgiutils import WebSocketWSGIApplication
 
-from Highway import Server, Route
+from Highway import Server, Route, DummyPipe
 
 
 class Info(Route):
@@ -86,22 +86,19 @@ class Subscribe(Route):
 	CHANNELS = [EDITOR, WALLABY, WEB]
 
 	def run(self, data, handler):
-		if "type" in data:
-			if data["type"] == Subscribe.EDITOR:
-				handler.channel = Subscribe.EDITOR
-				handler.broadcast.add(handler, handler.channel)
-			elif data["type"] == Subscribe.WALLABY:
-				handler.channel = Subscribe.Channels.WALLABY
-				handler.broadcast.add(handler, handler.channel)
-			elif data["type"] == Subscribe.WEB:
-				handler.channel = Subscribe.Channels.WEB
-				handler.broadcast.add(handler, handler.channel)
-		if handler.debug:
-			Logging.info("'%s:%d' has identified as a %s client." % (handler.info[0], handler.info[1],
-				"Editor" if handler.channel == Subscribe.EDITOR else
-				"Wallaby" if handler.channel == Subscribe.WALLABY else
-				"Web" if handler.channel == Subscribe.WEB else
-				"Unknown (will not subscribe to broadcast)"))
+		if type(data) is dict:
+			if "channel" in data:
+				if data["channel"] in Subscribe.CHANNELS:
+					handler.channel = data["channel"]
+					handler.broadcast.add(handler, handler.channel)
+				if handler.debug:
+					Logging.info("'%s:%i' has identified as a %s client." % (handler.address, handler.port,
+						"Editor" if handler.channel == Subscribe.EDITOR else
+						"Controller" if handler.channel == Subscribe.WALLABY else
+						"Web" if handler.channel == Subscribe.WEB else
+						"Unknown (will not subscribe to broadcast)"))
+			if "name" in data:
+				handler.name = data["name"]
 
 
 class Peers(Route):
@@ -109,22 +106,25 @@ class Peers(Route):
 		out = {}
 		check_type = False
 		if type(data) is dict:
-			if "type" in data:
+			if "channel" in data:
 				check_type = True
+			# We can use the in keyword this way
+			if type(data["channel"]) is int:
+				data["channel"] = (data["channel"], )
 		peers = handler.peers
 		for peer_id in peers:
-			if not check_type or peers[peer_id].channel in data["type"]:
+			if not check_type or peers[peer_id].channel in data["channel"]:
 				peer = peers[peer_id]
 				if peer is not handler:
 					out[peer_id] = {"name" : peer.name, 
 					"address" : peer.address, "port" : peer.port, 
-					"type" : peer.channel}			
+					"channel" : peer.channel}			
 		handler.send(out, handler.reverse_routes[self])
 
 
 class Handler(Server):
 	def setup(self, routes, broadcast, websockets, debug=False):
-		super().setup(routes, websockets, debug=debug)
+		super().setup(routes, websockets, piping=True, debug=debug)
 		self.broadcast = broadcast
 		self.channel = None
 		self.name = "Unknown"
@@ -183,7 +183,7 @@ server.set_app(WebSocketWSGIApplication(handler_cls=Handler,
 		"websockets" : server.manager.websockets,
 		"routes" : {"info" : Info(),
 		"subscribe" : Subscribe(), 
-		"std_stream" : StdStream(),
+		"hostname" : DummyPipe(),
 		"peers" : Peers()}}))
 
 
