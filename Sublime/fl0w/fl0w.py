@@ -17,7 +17,7 @@ from watchdog.events import FileSystemEventHandler
 import sublime
 import sublime_plugin
 
-from Highway import Client, Route
+from Highway import Client, Route, DummyPipe
 
 from SublimeMenu import *
 import Logging
@@ -36,7 +36,7 @@ def plugin_unloaded():
 
 class Fl0wClient(Client):
 	def setup(self, routes, fl0w, debug=False):
-		super().setup(routes, debug=debug)
+		super().setup(routes, piping=True, debug=debug)
 		self.fl0w = fl0w
 
 
@@ -61,7 +61,20 @@ class Fl0wClient(Client):
 			handler.fl0w.meta.invoke(handler.fl0w.window, back=handler.fl0w.main_menu)
 
 
+	class Peers(Route):
+		def run(self, data, handler):
+			controller_menu = Menu()
+			for id_ in data:
+				action_menu = Menu(subtitles=False)
+				action_menu += Entry("Set Name", action=lambda: Input("New Hostname:", 
+						initial_text=data[id_]["name"], on_done=self.set_hostname,
+						kwargs={"id_" : id_, "handler" : handler}).invoke(handler.fl0w.window))
+				controller_menu += Entry(data[id_]["name"], id_, sub_menu=action_menu)
+			controller_menu.invoke(handler.fl0w.window, back=handler.fl0w.main_menu)
 
+
+		def set_hostname(self, hostname, id_, handler):
+			handler.pipe({"set" : hostname}, "hostname", id_)
 
 
 class Fl0w:
@@ -98,6 +111,8 @@ class Fl0w:
 		
 		
 		self.main_menu = Menu()
+		self.main_menu += Entry("Controllers", "All connected controllers.", 
+			action=lambda: self.ws.send({"channel" : 2}, "peers"))
 		self.main_menu += Entry("Settings", "General purpose settings", 
 			sub_menu=self.settings)
 		self.main_menu += Entry("Disconnect", "Disconnect from server", 
@@ -143,7 +158,8 @@ class Fl0w:
 	def connect(self, connect_details):
 		try:
 			self.ws = Fl0wClient('ws://%s' % connect_details)
-			self.ws.setup({"info" : Fl0wClient.Info()}, self, debug=False)
+			self.ws.setup({"info" : Fl0wClient.Info(), "peers" : Fl0wClient.Peers()}, 
+				self, debug=True)
 			self.ws.connect()
 			sublime.set_timeout_async(self.ws.run_forever, 0)
 		except OSError as e:
@@ -160,7 +176,7 @@ class Fl0w:
 		if self.connected:
 			self.ws.close()
 			self.window.active_view().set_status(FL0W_STATUS, 
-				"Connection closed ('%s')" % self.folder)
+				"Connection closed '%s'" % self.folder)
 
 
 
