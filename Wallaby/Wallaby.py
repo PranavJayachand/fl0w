@@ -1,21 +1,17 @@
-from ESock import ESock
-from Sync import SyncClient
-from Utils import is_socket_related_error
-from Utils import capture_trace
-from Utils import is_wallaby
-import Routing
+from Highway import Route, Pipe, Client
 import Logging
 import Config
+from Utils import is_wallaby, set_hostname, get_hostname
+
 
 import socket
 import time
 import os
 import sys
-import platform
 import subprocess
 import _thread
 
-CHANNEL = "w"
+CHANNEL = 2
 IS_WALLABY = is_wallaby()
 PATH = "/home/root/Documents/KISS/bin/" if IS_WALLABY else (sys.argv[1] if len(sys.argv) > 1 else None)
 
@@ -26,7 +22,8 @@ if not PATH:
 if not IS_WALLABY:
 	Logging.warning("Binaries that were created for Wallaby Controllers will not run on a simulated Wallaby.")
 
-class WallabyControl(Routing.ClientRoute):
+
+class WallabyControl(Route):
 	def __init__(self, output_unbuffer):
 		self.output_unbuffer = output_unbuffer
 		self.actions_with_params = {"run" : self.run_program}
@@ -80,69 +77,47 @@ class WallabyControl(Routing.ClientRoute):
 		handler.sock.close()
 
 
-def get_wallaby_hostname():
-	return open("/etc/hostname", "r").read()
 
-class GetInfo(Routing.ClientRoute):
-	def run(self, data, handler):
-		if data == "":
-			handler.sock.send({"type" : CHANNEL,
-				"name" : platform.node() if not IS_WALLABY else get_wallaby_hostname()}, "get_info")
-		elif "name" in data:
-			if IS_WALLABY:
-				open("/etc/hostname", "w").write(str(data["name"]))
-			else:
-				Logging.info("Hostname change: '%s'" % str(data["name"]))
+class Subscribe(Route):
+	def start(self, handler):
+		handler.send({"name" : get_hostname(), "channel" : CHANNEL}, "subscribe")
 
 
-class WallabyClient:
-	def __init__(self, host_port_pair, routes, debug=False):
-		self.sock = ESock(socket.create_connection(host_port_pair), debug=debug)
-		self.connected = True
-		self.debug = debug
-		self.sync = SyncClient(self.sock, PATH, "w_sync", debug=True)
-		routes.update({"w_sync" : self.sync})
-		self.routes = routes
+class Hostname(Pipe):
+	def run(self, data, peer, handler):
+		if type(data) is dict:
+			if "set" in data:
+				set_hostname(str(data["set"]))
 
 
-	def start(self):
-		self.sync.start()
-		while 1 and self.connected:
-			data = self.sock.recv()
-			try:
-				if data[1] in self.routes:
-					self.routes[data[1]].run(data[0], self)
-			except Exception as e:
-				if not is_socket_related_error(e):
-					capture_trace()
-				break
 
+class Handler(Client):
+	def setup(self, routes, debug=False):
+		super().setup(routes, piping=True, debug=debug)
 
-	def stop(self):
-		self.sock.close()
 
 
 
 CONFIG_PATH = "wallaby.cfg"
 
 config = Config.Config()
-config.add(Config.Option("server_address", ("127.0.0.1", 3077)))
-config.add(Config.Option("debug", True, validator=lambda x: True if True or False else False))
+config.add(Config.Option("server_address", "ws://127.0.0.1:3077"))
+config.add(Config.Option("debug", False, validator=lambda x: True if True or False else False))
 config.add(Config.Option("output_unbuffer", "stdbuf"))
-config.add(Config.Option("compression_level", 0, validator=lambda x: x >= 0 and x <= 9))
 
 try:
 	config = config.read_from_file(CONFIG_PATH)
 except FileNotFoundError:
 	config.write_to_file(CONFIG_PATH)
-	Logging.info("Config file created. Please modify to reflect your setup.")
-	exit(1)
 	config = config.read_from_file(CONFIG_PATH)
 
-wallaby_client = WallabyClient(config.server_address,
-	{"wallaby_control" : WallabyControl(config.output_unbuffer), "get_info" : GetInfo()},
-	debug=config.debug)
+
 try:
-	wallaby_client.start()
+	ws = Handler(config.server_address)
+	# setup has to be called before the connection is established
+	ws.setup({"subscribe" : Subscribe(), "hostname" : Hostname()}, 
+		debug=config.debug)
+	ws.connect()
+	ws.run_forever()
 except KeyboardInterrupt:
-	wallaby_client.stop()
+	ws.close()
