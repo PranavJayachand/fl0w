@@ -17,7 +17,7 @@ from watchdog.events import FileSystemEventHandler
 import sublime
 import sublime_plugin
 
-from Highway import Client, Route, DummyPipe
+from Highway import Client, Route, Pipe, DummyPipe
 
 from SublimeMenu import *
 import Logging
@@ -65,16 +65,32 @@ class Fl0wClient(Client):
 		def run(self, data, handler):
 			controller_menu = Menu()
 			for id_ in data:
-				action_menu = Menu(subtitles=False)
-				action_menu += Entry("Set Name", action=lambda: Input("New Hostname:", 
+				action_menu = Menu()
+				action_menu += Entry("Set Name", 
+					"Sets the hostname of the selected controller",
+					action=lambda: Input("New Hostname:", 
 						initial_text=data[id_]["name"], on_done=self.set_hostname,
 						kwargs={"id_" : id_, "handler" : handler}).invoke(handler.fl0w.window))
+				action_menu += Entry("Processes", 
+					"Lists processes currently running on controller.", 
+					action=lambda handler: handler.pipe(None, "processes", id_),
+					kwargs={"handler" : handler})
 				controller_menu += Entry(data[id_]["name"], id_, sub_menu=action_menu)
 			controller_menu.invoke(handler.fl0w.window, back=handler.fl0w.main_menu)
 
 
 		def set_hostname(self, hostname, id_, handler):
 			handler.pipe({"set" : hostname}, "hostname", id_)
+
+
+	class Processes(Pipe):
+		def run(self, data, peer, handler):
+			view = handler.fl0w.window.new_file()
+			view.set_name("Processes")
+			view.settings().set("draw_indent_guides", False)
+			for line in data:
+				view.run_command("append", {"characters": line + "\n"})
+			view.set_read_only(True)
 
 
 class Fl0w:
@@ -158,7 +174,8 @@ class Fl0w:
 	def connect(self, connect_details):
 		try:
 			self.ws = Fl0wClient('ws://%s' % connect_details)
-			self.ws.setup({"info" : Fl0wClient.Info(), "peers" : Fl0wClient.Peers()}, 
+			self.ws.setup({"info" : Fl0wClient.Info(), "peers" : Fl0wClient.Peers(),
+				"processes" : Fl0wClient.Processes()}, 
 				self, debug=True)
 			self.ws.connect()
 			sublime.set_timeout_async(self.ws.run_forever, 0)
