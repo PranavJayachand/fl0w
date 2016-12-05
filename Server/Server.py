@@ -113,6 +113,7 @@ class Peers(Route):
 				data["channel"] = (data["channel"], )
 		peers = handler.peers
 		for peer_id in peers:
+			# Only check for type inclusion if check_type is True
 			if not check_type or peers[peer_id].channel in data["channel"]:
 				peer = peers[peer_id]
 				if peer is not handler:
@@ -184,6 +185,7 @@ server.set_app(WebSocketWSGIApplication(handler_cls=Handler,
 		"routes" : {"info" : Info(),
 		"subscribe" : Subscribe(), 
 		"hostname" : DummyPipe(),
+		"processes" : DummyPipe(),
 		"peers" : Peers()}}))
 
 
