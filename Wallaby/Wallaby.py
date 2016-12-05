@@ -29,7 +29,7 @@ class SensorReadout:
 	ANALOG = 1
 	DIGITAL = 2
 
-	def __init__(self, poll_rate=0.2, handler):
+	def __init__(self, handler, poll_rate=0.2):
 		self.poll_rate = poll_rate
 		self.handler = handler
 		self.peers = {}
@@ -236,7 +236,7 @@ try:
 	ws = Handler(config.server_address)
 	# setup has to be called before the connection is established
 	ws.setup({"subscribe" : Subscribe(), "hostname" : Hostname(),
-		"processes" : Processes()}, 
+		"processes" : Processes()},
 		debug=config.debug)
 	ws.connect()
 	ws.run_forever()
