@@ -1,7 +1,7 @@
 from Highway import Route, Pipe, Client
 import Logging
 import Config
-from Utils import is_wallaby, set_hostname, get_hostname
+import Utils
 
 
 import socket
@@ -9,10 +9,11 @@ import time
 import os
 import sys
 import subprocess
-import _thread
+from random import randint
+from _thread import start_new_thread
 
 CHANNEL = 2
-IS_WALLABY = is_wallaby()
+IS_WALLABY = Utils.is_wallaby()
 PATH = "/home/root/Documents/KISS/bin/" if IS_WALLABY else (sys.argv[1] if len(sys.argv) > 1 else None)
 
 LIB_WALLABY = "/usr/lib/libwallaby.so"
@@ -28,12 +29,18 @@ if not IS_WALLABY:
 class SensorReadout:
 	ANALOG = 1
 	DIGITAL = 2
+	NAMED_MODES = {ANALOG : "analog", DIGITAL : "digital"}
+	MODES = tuple(NAMED_MODES.keys())
+
 
 	def __init__(self, handler, poll_rate=0.2):
 		self.poll_rate = poll_rate
 		self.handler = handler
 		self.peers = {}
+		self.readout_required = {SensorReadout.ANALOG : [],
+			SensorReadout.DIGITAL : []}
 		self.generate_random_values = False
+		# Running on actual hardware?
 		if Utils.is_wallaby():
 			if not os.path.exists(LIB_WALLABY):
 				Logging.error("The Wallaby library should normally exist on "
@@ -43,6 +50,7 @@ class SensorReadout:
 			Logging.warning("Sensor data can not be read on a dev-system. "
 				"Generating random values instead.")
 			self.generate_random_values = True
+		# Generate random values?
 		if not self.generate_random_values:
 			self.wallaby_library = cdll.LoadLibrary(LIB_WALLABY)
 			self.get_sensor_value = self.__get_sensor_value
@@ -51,17 +59,26 @@ class SensorReadout:
 		start_new_thread(self._sensor_fetcher, ())
 
 
-	def subscribe(self, port, peer, mode):
+	def subscribe(self, port, mode, peer):
+		if port not in self.readout_required[mode]:
+			self.readout_required[mode].append(port)
 		if not peer in self.peers:
-			self.peers[peer] = {SensorReadout.ANALOG : [], SensorReadout.DIGITAL : []}
-		else:
-			self.peers[peer][mode].append(port)
+			self.peers[peer] = {SensorReadout.ANALOG : [],
+			SensorReadout.DIGITAL : []}
+		self.peers[peer][mode].append(port)
 
 
-	def unsubscribe(self, port, peer, mode):
+	def unsubscribe(self, port, mode, peer):
 		if peer in self.peers:
 			if port in self.peers[peer][mode]:
 				del self.peers[peer][mode][self.peers[peer][mode].index(port)]
+		readout_still_required = False
+		for peer in self.peers:
+			if port in self.peers[peer][mode]:
+				readout_required = True
+				break
+		if not readout_required:
+			del self.readout_required[mode][self.readout_required[mode].index(port)]
 
 
 	def __get_sensor_value(self, port, mode):
@@ -74,32 +91,33 @@ class SensorReadout:
 	def __get_random_value(self, port, mode):
 		if mode == SensorReadout.ANALOG:
 			return randint(0, 4095)
-		elif mode == DIGITAL:
+		elif mode == SensorReadout.DIGITAL:
 			return randint(0, 1)
 
 
 
-	def _sensor_fetcher(self, handler):
+	def _sensor_fetcher(self):
 		while True:
-			current_values = {"analog" : {}, "digital" : {}}
+			current_values = {SensorReadout.ANALOG : {},
+			SensorReadout.DIGITAL : {}}
+			for mode in SensorReadout.MODES:
+				for port in self.readout_required[mode]:
+					current_values[mode][port] = self.get_sensor_value(port, mode)
 			for peer in self.peers:
 				response = {"analog" : {}, "digital" : {}}
-				for port in self.peers[peer][SensorReadout.ANALOG]:
-					if not port in current_values["analog"]:
-						sensor_value = get_sensor_value(port, ANALOG)
-						response["analog"][port] = sensor_value
-						current_values["analog"][port] = sensor_value
-					else:
-						response["analog"][port] = current_values["analog"][port]
-				for port in self.peers[peer][SensorReadout.DIGITAL]:
-					if not port in current_values["digital"]:
-						sensor_value = get_sensor_value(port, DIGITAL)
-						response["digital"][port] = sensor_value
-						current_values["digital"][port] = sensor_value
-					else:
-						response["digital"][port] = current_values["digital"][port]
+				for mode in SensorReadout.NAMED_MODES:
+					for port in self.peers[peer][mode]:
+						response[SensorReadout.NAMED_MODES[mode]][port] = current_values[mode][port]
 				self.handler.pipe(response, "sensor", peer)
 			time.sleep(self.poll_rate)
+
+	@staticmethod
+	def valid_port(port, mode):
+		if mode == SensorReadout.ANALOG:
+			return port >= 0 and port <= 5
+		elif mode == SensorReadout.DIGITAL:
+			return port >= 0 and port <= 9
+		return False
 
 
 
@@ -110,32 +128,26 @@ class Sensor(Pipe):
 	"""
 	def run(self, data, peer, handler):
 		if type(data) is dict:
-			if "subscribe" in data:
-				if "analog" in data["subscribe"]:
-					for port in data["subscribe"]["analog"]:
-						if type(port) is int:
-							if port >= 0 and port <= 10:
-								sensor_readout.subscribe(port, handler,
-									SensorReadout.ANALOG)
-				if "digital" in data["subscribe"]:
-					for port in data["subscribe"]["digital"]:
-						if type(port) is int:
-							if port >= 0 and port <= 10:
-								sensor_readout.subscribe(port, handler,
-									SensorReadout.DIGITAL)
-			if "unsubscribe" in data:
-				if "analog" in data["unsubscribe"]:
-					for port in data["unsubscribe"]["analog"]:
-						if type(port) is int:
-							if port >= 0 and port <= 10:
-								sensor_readout.unsubscribe(port, handler,
-									SensorReadout.ANALOG)
-				if "digital" in data["unsubscribe"]:
-					for port in data["unsubscribe"]["digital"]:
-						if type(port) is int:
-							if port >= 0 and port <= 10:
-								sensor_readout.unsubscribe(port, handler,
-									SensorReadout.DIGITAL)
+			for event in ("subscribe", "unsubscribe"):
+				if event in data:
+					for mode in ("analog", "digital"):
+						if mode in data[event]:
+							for port in data[event][mode]:
+								if type(port) is int:
+									if mode == "analog":
+										mode = SensorReadout.ANALOG
+									elif mode == "digital":
+										mode = SensorReadout.DIGITAL
+									if SensorReadout.valid_port(port, mode):
+										if event == "subscribe":
+											self.sensor_readout.subscribe(port, mode, peer)
+										elif event == "unsubscribe":
+											self.sensor_readout.unsubscribe(port, mode, peer)
+
+	def start(self, handler):
+		self.sensor_readout = SensorReadout(handler)
+
+
 
 class WallabyControl(Route):
 	def __init__(self, output_unbuffer):
@@ -194,7 +206,7 @@ class WallabyControl(Route):
 
 class Subscribe(Route):
 	def start(self, handler):
-		handler.send({"name" : get_hostname(), "channel" : CHANNEL}, "subscribe")
+		handler.send({"name" : Utils.get_hostname(), "channel" : CHANNEL}, "subscribe")
 
 
 class Hostname(Pipe):
@@ -236,7 +248,7 @@ try:
 	ws = Handler(config.server_address)
 	# setup has to be called before the connection is established
 	ws.setup({"subscribe" : Subscribe(), "hostname" : Hostname(),
-		"processes" : Processes()},
+		"processes" : Processes(), "sensor" : Sensor()},
 		debug=config.debug)
 	ws.connect()
 	ws.run_forever()
