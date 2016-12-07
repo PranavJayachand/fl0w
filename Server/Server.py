@@ -109,17 +109,17 @@ class Peers(Route):
 			if "channel" in data:
 				check_type = True
 			# We can use the in keyword this way
-			if type(data["channel"]) is int:
-				data["channel"] = (data["channel"], )
+				if type(data["channel"]) is int:
+					data["channel"] = (data["channel"], )
 		peers = handler.peers
 		for peer_id in peers:
 			# Only check for type inclusion if check_type is True
 			if not check_type or peers[peer_id].channel in data["channel"]:
 				peer = peers[peer_id]
 				if peer is not handler:
-					out[peer_id] = {"name" : peer.name, 
-					"address" : peer.address, "port" : peer.port, 
-					"channel" : peer.channel}			
+					out[peer_id] = {"name" : peer.name,
+					"address" : peer.address, "port" : peer.port,
+					"channel" : peer.channel}
 		handler.send(out, handler.reverse_routes[self])
 
 
@@ -129,7 +129,7 @@ class Handler(Server):
 		self.broadcast = broadcast
 		self.channel = None
 		self.name = "Unknown"
-		
+
 
 	def ready(self):
 		Logging.info("Handler for '%s:%d' ready." % (self.address, self.port))
@@ -174,19 +174,20 @@ for channel in Subscribe.CHANNELS:
 compile = Compile(config.source_path, config.binary_path)
 
 
-server = make_server(config.server_address[0], config.server_address[1], 
+server = make_server(config.server_address[0], config.server_address[1],
 	server_class=WSGIServer, handler_class=WebSocketWSGIRequestHandler,
 	app=None)
 server.initialize_websockets_manager()
 
-server.set_app(WebSocketWSGIApplication(handler_cls=Handler, 
-		handler_args={"debug" : config.debug, "broadcast" : broadcast, 
+server.set_app(WebSocketWSGIApplication(handler_cls=Handler,
+		handler_args={"debug" : config.debug, "broadcast" : broadcast,
 		"websockets" : server.manager.websockets,
 		"routes" : {"info" : Info(),
-		"subscribe" : Subscribe(), 
+		"subscribe" : Subscribe(),
 		"hostname" : DummyPipe(),
 		"processes" : DummyPipe(),
-		"peers" : Peers()}}))
+		"peers" : Peers(),
+		"sensor" : DummyPipe()}}))
 
 
 try:
