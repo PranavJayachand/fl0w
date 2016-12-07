@@ -3,7 +3,6 @@ import Logging
 import Config
 import Utils
 
-
 import socket
 import time
 import os
@@ -72,13 +71,24 @@ class SensorReadout:
 		if peer in self.peers:
 			if port in self.peers[peer][mode]:
 				del self.peers[peer][mode][self.peers[peer][mode].index(port)]
-		readout_still_required = False
+				self.determine_required_readouts()
+
+
+	def determine_required_readouts(self):
+		readout_required = {SensorReadout.ANALOG : [],
+			SensorReadout.DIGITAL : []}
 		for peer in self.peers:
-			if port in self.peers[peer][mode]:
-				readout_required = True
-				break
-		if not readout_required:
-			del self.readout_required[mode][self.readout_required[mode].index(port)]
+			for mode in (SensorReadout.ANALOG, SensorReadout.DIGITAL):
+				for port in self.peers[peer][mode]:
+					if not port in readout_required[mode]:
+						readout_required[mode].append(port)
+		self.readout_required = readout_required
+
+
+	def unsubscribe_all(self, peer):
+		if peer in self.peers:
+			del self.peers[peer]
+			self.determine_required_readouts()
 
 
 	def __get_sensor_value(self, port, mode):
@@ -120,14 +130,22 @@ class SensorReadout:
 		return False
 
 
+class Identify(Pipe):
+	def run(self, data, peer, handler):
+		Utils.play_sound(config.identify_sound)
+
 
 class Sensor(Pipe):
 	"""
 	{"subscribe" : {"analog" : [1, 2, 3], "digital" : [1, 2, 3]}}
 	{"unsubscribe" : {"analog" : [1, 2, 3], "digital" : [1, 2, 3]}}
+	{"poll_rate" : 10}
 	"""
 	def run(self, data, peer, handler):
 		if type(data) is dict:
+			if "poll_rate" in data:
+				if type(data["poll_rate"]) in (int, float) and data["poll_rate"] >= 0.1:
+					self.sensor_readout.poll_rate = data["poll_rate"]
 			for event in ("subscribe", "unsubscribe"):
 				if event in data:
 					for mode in ("analog", "digital"):
@@ -143,6 +161,10 @@ class Sensor(Pipe):
 											self.sensor_readout.subscribe(port, mode, peer)
 										elif event == "unsubscribe":
 											self.sensor_readout.unsubscribe(port, mode, peer)
+		elif type(data) is str:
+			if data == "unsubscribe":
+				self.sensor_readout.unsubscribe_all(peer)
+
 
 	def start(self, handler):
 		self.sensor_readout = SensorReadout(handler)
@@ -236,6 +258,8 @@ config = Config.Config()
 config.add(Config.Option("server_address", "ws://127.0.0.1:3077"))
 config.add(Config.Option("debug", False, validator=lambda x: True if True or False else False))
 config.add(Config.Option("output_unbuffer", "stdbuf"))
+config.add(Config.Option("identify_sound", "Wallaby/identify.wav", 
+	validator=lambda x: os.path.isfile(x)))
 
 try:
 	config = config.read_from_file(CONFIG_PATH)
@@ -248,7 +272,8 @@ try:
 	ws = Handler(config.server_address)
 	# setup has to be called before the connection is established
 	ws.setup({"subscribe" : Subscribe(), "hostname" : Hostname(),
-		"processes" : Processes(), "sensor" : Sensor()},
+		"processes" : Processes(), "sensor" : Sensor(), 
+		"identify" : Identify()},
 		debug=config.debug)
 	ws.connect()
 	ws.run_forever()
