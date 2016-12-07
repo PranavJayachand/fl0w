@@ -1,7 +1,6 @@
 from __future__ import print_function
 from time import strftime
-from inspect import getmodule
-from inspect import stack
+from inspect import getmodule, stack, currentframe, getframeinfo
 from sys import stderr
 from sys import stdout
 
@@ -80,7 +79,8 @@ def print_out(message, color, file):
 			module = getmodule(stack_[2][0]).__name__
 			CACHED_MODULES[stack_[2][0].f_code] = module
 	if not print_fallback:
-		print("[%s] %s: %s%s\033[0m" % (strftime("%H:%M:%S"), module, color, message), file=file)
+		print("[%s] %s:%i → %s%s\033[0m" % (strftime("%H:%M:%S"), module, 
+			stack_[2][0].f_lineno, color, message), file=file)
 		file.flush()
 	else:
 		print("[%s] %s: %s" % (strftime("%H:%M:%S"), module, message))
