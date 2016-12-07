@@ -60,6 +60,9 @@ class Route:
 	def start(self, handler):
 		pass
 
+	def stop(self, handler):
+		pass
+
 
 class Pipe(Route):
 	def run(self, data, peer, handler):
@@ -78,6 +81,14 @@ def launch_routes(created_routes, handler):
 	for prefix in created_routes:
 		try:
 			created_routes[prefix].start(handler)
+		except AttributeError:
+			pass
+
+
+def close_routes(created_routes, handler):
+	for prefix in created_routes:
+		try:
+			created_routes[prefix].stop(handler)
 		except AttributeError:
 			pass
 
@@ -158,9 +169,6 @@ class ServerPipe(Route):
 class DummyPipe(Route):
 	def run(self, data, handler):
 		pass
-
-
-
 
 
 # Message packing and unpacking
