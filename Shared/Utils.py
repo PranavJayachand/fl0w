@@ -1,14 +1,24 @@
 from traceback import print_exception
-from sys import exc_info
+from sys import exc_info, byteorder
 import platform
 import os
 import struct
 import socket
 import fcntl
+import subprocess
 
 class HostnameNotChangedError(PermissionError):
 	def __init__(self):
-		super(PermissionError, self).__init__("hostname could not be changed")	
+		super(PermissionError, self).__init__("hostname could not be changed")
+
+class NotSupportedOnPlatform(OSError):
+	def __init__(self):
+		super(OSError, self).__init__("feature not avaliable on OS")	
+
+class PlaybackFailure(OSError):
+	def __init__(self):
+		super(OSError, self).__init__("audio playback failed")	
+
 
 def capture_trace():
 	exc_type, exc_value, exc_traceback = exc_info()
@@ -70,3 +80,13 @@ def get_ip_address(ifname=None):
 			ip_address = sock.getsockname()[0]
 			sock.close()
 			return ip_address
+
+
+def play_sound(path):
+	if is_linux() or is_darwin():
+		try:
+			subprocess.check_call(["aplay" if is_linux() else "afplay", path])
+		except subprocess.CalledProcessError as e:
+			raise PlaybackFailure()
+	else:
+		raise NotSupportedOnPlatform()
