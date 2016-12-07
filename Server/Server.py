@@ -132,13 +132,15 @@ class Handler(Server):
 
 
 	def ready(self):
-		Logging.info("Handler for '%s:%d' ready." % (self.address, self.port))
+		if self.debug:
+			Logging.info("Handler for '%s:%d' ready." % (self.address, self.port))
 
 
 	def closed(self, code, reason):
 		if self.channel != None:
 			self.broadcast.remove(self, self.channel)
-		Logging.info("'%s:%d' disconnected." % (self.address, self.port))
+		if self.debug:
+			Logging.info("'%s:%d' disconnected." % (self.address, self.port))
 
 
 
@@ -187,7 +189,8 @@ server.set_app(WebSocketWSGIApplication(handler_cls=Handler,
 		"hostname" : DummyPipe(),
 		"processes" : DummyPipe(),
 		"peers" : Peers(),
-		"sensor" : DummyPipe()}}))
+		"sensor" : DummyPipe(),
+		"identify" : DummyPipe()}}))
 
 
 try:
