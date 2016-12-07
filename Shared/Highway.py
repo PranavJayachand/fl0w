@@ -148,7 +148,7 @@ class ServerPipe(Route):
 		route = handler.exchange_routes[m_route]
 		if id_ in handler.peers:
 			if handler.debug:
-				Logging.info("Forwarding to '%s' on route '%s'" % (id_, route), 
+				Logging.info("Forwarding to '%s' on route '%s'" % (id_, route),
 					color=Logging.LIGHT_YELLOW)
 			handler.peers[id_].send(pack_pipe_dest_message(data, handler.id_), route)
 		else:
@@ -190,18 +190,18 @@ def pack_message(data, exchange_route,
 		indexed_dict=indexed_dict) + data
 
 
-def pack_pipe_src_message(data, exchange_route, id_, debug=False, 
+def pack_pipe_src_message(data, exchange_route, id_, debug=False,
 	indexed_dict=False):
 	data, original_data_type = prepare_data(data)
 	return create_pipe_src_metadata(original_data_type, exchange_route, id_,
 		indexed_dict=indexed_dict) + data
 
-def pack_pipe_dest_message(data, id_, debug=False, 
+def pack_pipe_dest_message(data, id_, debug=False,
 	indexed_dict=False):
 	data, original_data_type = prepare_data(data)
 	return create_pipe_dest_metadata(original_data_type, id_,
 		indexed_dict=indexed_dict) + data
-	
+
 
 def parse_metadata(message):
 	metadata = struct.unpack(PACK_FORMAT, message[:METADATA_LENGTH])
@@ -312,6 +312,9 @@ class Shared:
 				self.port))
 		try:
 			route = self.routes[route]
+		except:
+			Logging.warning("'%s' does not exist." % route)
+		else:
 			if not issubclass(route.__class__, Pipe):
 				route.run(data, self)
 			else:
@@ -319,15 +322,13 @@ class Shared:
 				peer = peer.decode()
 				data = convert_data(data[PIPE_DEST_METADATA_LENGTH:], data_type, debug=self.debug)
 				route.run(data, peer, self)
-		except KeyError:
-			Logging.warning("'%s' does not exist." % route)
 
 
 	def patched_send(self, data, route, indexed_dict=False):
 		try:
 			self.raw_send(pack_message(data,
 				self.peer_reverse_exchange_routes[route],
-				debug=self.debug, indexed_dict=indexed_dict), 
+				debug=self.debug, indexed_dict=indexed_dict),
 			binary=True)
 		except KeyError:
 			Logging.error("'%s' is not a valid peer route." % route)
@@ -361,7 +362,7 @@ class Server(WebSocket, Shared):
 	def peers(self):
 		if self.websockets != self._last_websockets:
 			if self.debug:
-				Logging.info("Rebuilding peers. (currently connected: %i)" % 
+				Logging.info("Rebuilding peers. (currently connected: %i)" %
 					len(self.websockets))
 			self._peers = {}
 			for websocket in self.websockets:
@@ -380,13 +381,13 @@ class Client(WebSocketClient, Shared):
 			self.pipe = self.__pipe
 			routes[PIPE_ROUTE] = DummyPipe()
 		super().setup(routes, debug=debug)
-		
+
 		self.override_methods()
 
 	def __pipe(self, data, route, id_):
 		try:
-			self.send(pack_pipe_src_message(data, 
-				self.peer_reverse_exchange_routes[route], id_, debug=self.debug), 
+			self.send(pack_pipe_src_message(data,
+				self.peer_reverse_exchange_routes[route], id_, debug=self.debug),
 				PIPE_ROUTE)
 		except KeyError:
 			Logging.warning("'%s' does not exist." % route)
