@@ -190,7 +190,8 @@ server.set_app(WebSocketWSGIApplication(handler_cls=Handler,
 		"processes" : DummyPipe(),
 		"peers" : Peers(),
 		"sensor" : DummyPipe(),
-		"identify" : DummyPipe()}}))
+		"identify" : DummyPipe(),
+		"list_programs" : DummyPipe()}}))
 
 
 try:
