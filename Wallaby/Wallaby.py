@@ -16,6 +16,7 @@ IS_WALLABY = Utils.is_wallaby()
 PATH = "/home/root/Documents/KISS/bin/" if IS_WALLABY else (sys.argv[1] if len(sys.argv) > 1 else None)
 
 LIB_WALLABY = "/usr/lib/libwallaby.so"
+WALLABY_PROGRAMS = "/root/Documents/KISS/bin/"
 
 if not PATH:
 	Logging.error("No path specified. (Necessary on simulated Wallaby controllers.)")
@@ -133,6 +134,25 @@ class SensorReadout:
 class Identify(Pipe):
 	def run(self, data, peer, handler):
 		Utils.play_sound(config.identify_sound)
+		if handler.debug:
+			Logging.success("I was identified!")
+
+
+class ListPrograms(Pipe):
+	def run(self, data, peer, handler):
+		programs = []
+		if IS_WALLABY:
+			if os.path.isdir(WALLABY_PROGRAMS):
+				for program in os.listdir(WALLABY_PROGRAMS):
+					if "botball_user_program" in WALLABY_PROGRAMS + program:
+						programs.append(programm)
+			else:
+				Logging.error("Harrogate folder structure does not exist. "
+					"You broke something, mate.")
+		else:
+			for program in os.listdir("/bin"):
+				programs.append(program)
+		handler.pipe(programs, handler.reverse_routes[self], peer)
 
 
 class Sensor(Pipe):
@@ -235,7 +255,7 @@ class Hostname(Pipe):
 	def run(self, data, peer, handler):
 		if type(data) is dict:
 			if "set" in data:
-				set_hostname(str(data["set"]))
+				Utils.set_hostname(str(data["set"]))
 
 
 class Processes(Pipe):
@@ -258,7 +278,7 @@ config = Config.Config()
 config.add(Config.Option("server_address", "ws://127.0.0.1:3077"))
 config.add(Config.Option("debug", False, validator=lambda x: True if True or False else False))
 config.add(Config.Option("output_unbuffer", "stdbuf"))
-config.add(Config.Option("identify_sound", "Wallaby/identify.wav", 
+config.add(Config.Option("identify_sound", "Wallaby/identify.wav",
 	validator=lambda x: os.path.isfile(x)))
 
 try:
@@ -272,8 +292,8 @@ try:
 	ws = Handler(config.server_address)
 	# setup has to be called before the connection is established
 	ws.setup({"subscribe" : Subscribe(), "hostname" : Hostname(),
-		"processes" : Processes(), "sensor" : Sensor(), 
-		"identify" : Identify()},
+		"processes" : Processes(), "sensor" : Sensor(),
+		"identify" : Identify(), "list_programs" : ListPrograms()},
 		debug=config.debug)
 	ws.connect()
 	ws.run_forever()
