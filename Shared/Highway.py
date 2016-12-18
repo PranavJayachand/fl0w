@@ -103,11 +103,14 @@ def create_exchange_map(routes):
 	return exchange_map
 
 
-def validate_exchange_map(routes):
+def convert_exchange_map(routes):
+	exchange_map = {}
 	for key in routes:
-		if not type(key) is int and type(routes[key]) is str:
-			return False
-	return True
+		if key.isnumeric() and type(routes[key]) is str:
+			exchange_map[int(key)] = routes[key]
+		else:
+			return None
+	return exchange_map
 
 
 class ConvertFailedError(ValueError):
@@ -119,21 +122,32 @@ class ConvertFailedError(ValueError):
 class Meta(Route):
 	def run(self, data, handler):
 		if type(data) is dict:
-			handler.peer_exchange_routes = data
-			if handler.debug:
-				Logging.success("Received peer exchange routes: %s" % str(data))
-			handler.peer_reverse_exchange_routes = reverse_dict(handler.peer_exchange_routes)
-			if issubclass(handler.__class__, Client):
-				handler.send(handler.exchange_routes, META_ROUTE, indexed_dict=True)
-			try:
-				handler.ready()
-			except AttributeError:
-				pass
-			if handler.debug:
-				Logging.info("Launching routes.")
-			launch_routes(handler.routes, handler)
-			if handler.debug:
-				Logging.info("Routes launched.")
+			if "routes" in data:
+				peer_exchange_routes = convert_exchange_map(data["routes"])
+				if peer_exchange_routes != None:
+					handler.peer_exchange_routes = peer_exchange_routes
+					if handler.debug:
+						Logging.success("Received peer exchange routes: %s" % str(data))
+					handler.peer_reverse_exchange_routes = reverse_dict(handler.peer_exchange_routes)
+					if issubclass(handler.__class__, Client):
+						handler.send({"routes" : handler.exchange_routes}, META_ROUTE)
+					try:
+						handler.ready()
+					except AttributeError:
+						pass
+					if handler.debug:
+						Logging.info("Launching routes.")
+					launch_routes(handler.routes, handler)
+					if handler.debug:
+						Logging.info("Routes launched.")
+				else:
+					Logging.error("Received invalid exchange routes.")
+			if "unavaliable" in data:
+					try:
+						for peer in data["unavaliable"]:
+							handler.peer_unavaliable(peer)
+					except AttributeError:
+						Logging.warning("Handler does not implement a 'peer_unavaliabe' method.")
 		if type(data) is int:
 			if data == 1:
 				Logging.error("Last route was invalid.")
@@ -163,7 +177,9 @@ class ServerPipe(Route):
 					color=Logging.LIGHT_YELLOW)
 			handler.peers[id_].send(pack_pipe_dest_message(data, handler.id_), route)
 		else:
-			Logging.error("'%s' is not present in peers." % id_)
+			handler.send({"unavaliable" : [id_]}, "meta")
+			if handler.debug:
+				Logging.error("'%s' is not present in peers." % id_)
 
 
 class DummyPipe(Route):
@@ -352,9 +368,8 @@ class Shared:
 
 
 class Server(WebSocket, Shared):
-	def setup(self, routes, websockets, piping=False, debug=False):
-		if piping:
-			routes[PIPE_ROUTE] = ServerPipe()
+	def setup(self, routes, websockets, debug=False):
+		routes[PIPE_ROUTE] = ServerPipe()
 		super().setup(routes, debug=debug)
 		self.websockets = websockets
 		self._last_websockets = self.websockets.copy()
@@ -380,22 +395,24 @@ class Server(WebSocket, Shared):
 
 
 	def post_opened(self):
-		self.send(self.exchange_routes, META_ROUTE, indexed_dict=True)
+		self.send({"routes" : self.exchange_routes}, META_ROUTE)
 
 
 class Client(WebSocketClient, Shared):
-	def setup(self, routes, piping=False, debug=False):
-		if piping:
-			self.pipe = self.__pipe
-			routes[PIPE_ROUTE] = DummyPipe()
+	def setup(self, routes, debug=False):
+		routes[PIPE_ROUTE] = DummyPipe()
 		super().setup(routes, debug=debug)
 
 		self.override_methods()
 
-	def __pipe(self, data, route, id_):
+	def pipe(self, data, route, id_, indexed_dict=False):
 		try:
 			self.send(pack_pipe_src_message(data,
 				self.peer_reverse_exchange_routes[route], id_, debug=self.debug),
-				PIPE_ROUTE)
+				PIPE_ROUTE, indexed_dict=indexed_dict)
 		except KeyError:
 			Logging.warning("'%s' does not exist." % route)
+
+
+	def peer_unavaliable(self, peer, handler):
+		pass
