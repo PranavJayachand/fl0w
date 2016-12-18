@@ -157,9 +157,13 @@ class ListPrograms(Pipe):
 
 class Sensor(Pipe):
 	"""
+	->
 	{"subscribe" : {"analog" : [1, 2, 3], "digital" : [1, 2, 3]}}
 	{"unsubscribe" : {"analog" : [1, 2, 3], "digital" : [1, 2, 3]}}
 	{"poll_rate" : 10}
+
+	<-
+	{"analog" : {1 : 1240}, "digital" : {1 : 0, 2 : 0}}
 	"""
 	def run(self, data, peer, handler):
 		if type(data) is dict:
@@ -188,7 +192,6 @@ class Sensor(Pipe):
 
 	def start(self, handler):
 		self.sensor_readout = SensorReadout(handler)
-
 
 
 class WallabyControl(Route):
@@ -267,9 +270,12 @@ class Processes(Pipe):
 
 class Handler(Client):
 	def setup(self, routes, debug=False):
-		super().setup(routes, piping=True, debug=debug)
+		super().setup(routes, debug=debug)
 
-
+	def peer_unavaliable(self, peer):
+		if self.debug:
+			Logging.info("Unsubscribing '%s' from all sensor updates." % peer)
+		self.routes["sensor"].sensor_readout.unsubscribe_all(peer)
 
 
 CONFIG_PATH = "wallaby.cfg"
