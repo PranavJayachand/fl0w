@@ -99,23 +99,43 @@ class Subscribe(Route):
 						"Unknown (will not subscribe to broadcast)"))
 			if "name" in data:
 				handler.name = data["name"]
+			handler.routes["peers"].push_changes(handler)
 
 
 class Peers(Route):
+	"""
+	{"subscribe" : [1, 2]}
+	{"unsubscribe" : [1, 2]}
+	{"channels" : [1, 2]}
+	"""
+	def __init__(self):
+		self.subscriptions = {}
+
 	def run(self, data, handler):
+		for event in ("subscribe", "unsubscribe", "channels"):
+			if event in data:
+				channels = []
+				for channel in data[event]:
+					if channel in Subscribe.CHANNELS:
+						channels.append(channel)
+				if event == "unsubscribe":
+					for channel in channels:
+						self.unsubscribe(handler, channel)
+				else:
+					if event == "subscribe":
+						for channel in channels:
+							self.subscribe(handler, channel)
+					# Send on channels and on subscribe
+					self.send_connected_peers(handler, channels)						
+
+
+	def send_connected_peers(self, handler, channels):
 		out = {}
-		check_type = False
-		if type(data) is dict:
-			if "channel" in data:
-				check_type = True
-			# We can use the in keyword this way
-				if type(data["channel"]) is int:
-					data["channel"] = (data["channel"], )
 		peers = handler.peers
 		for peer_id in peers:
 			# Only check for type inclusion if check_type is True
-			if not check_type or peers[peer_id].channel in data["channel"]:
-				peer = peers[peer_id]
+			peer = peers[peer_id]
+			if peer.channel in channels:
 				if peer is not handler:
 					out[peer_id] = {"name" : peer.name,
 					"address" : peer.address, "port" : peer.port,
@@ -123,9 +143,41 @@ class Peers(Route):
 		handler.send(out, handler.reverse_routes[self])
 
 
+	def subscribe(self, handler, channel):
+		if handler not in self.subscriptions:
+			self.subscriptions[handler] = [channel]
+		else:
+			if channel not in self.subscriptions[handler]:
+				self.subscriptions[handler].append(channel)
+
+
+	def unsubscribe(self, handler, channel):
+		if handler in self.subscriptions:
+			if channel in self.subscriptions[handler]:
+				del self.subscriptions[handler][self.subscriptions[handler].index(channel)]
+
+
+	def unsubscribe_all(self, handler):
+		if handler in self.subscriptions:
+			del self.subscriptions[handler]
+
+
+	def push_changes(self, handler):
+		out = {}
+		to_unsubscribe = []
+		peers = handler.peers
+		for handler_ in self.subscriptions:
+			try:
+				self.send_connected_peers(handler_, self.subscriptions[handler_])
+			except RuntimeError:
+				to_unsubscribe.append(handler_)
+		for handler in to_unsubscribe:
+			self.unsubscribe_all(handler)
+
+
 class Handler(Server):
 	def setup(self, routes, broadcast, websockets, debug=False):
-		super().setup(routes, websockets, piping=True, debug=debug)
+		super().setup(routes, websockets, debug=debug)
 		self.broadcast = broadcast
 		self.channel = None
 		self.name = "Unknown"
@@ -134,14 +186,14 @@ class Handler(Server):
 	def ready(self):
 		if self.debug:
 			Logging.info("Handler for '%s:%d' ready." % (self.address, self.port))
-
+		
 
 	def closed(self, code, reason):
 		if self.channel != None:
 			self.broadcast.remove(self, self.channel)
 		if self.debug:
 			Logging.info("'%s:%d' disconnected." % (self.address, self.port))
-
+		self.routes["peers"].push_changes(self)
 
 
 def folder_validator(folder):
@@ -195,6 +247,7 @@ server.set_app(WebSocketWSGIApplication(handler_cls=Handler,
 
 
 try:
+	Logging.header("Server loop starting.")
 	server.serve_forever()
 except KeyboardInterrupt:
 	Logging.header("Gracefully shutting down server.")
