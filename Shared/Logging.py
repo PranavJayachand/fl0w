@@ -3,6 +3,7 @@ from time import strftime
 from inspect import getmodule, stack, currentframe, getframeinfo
 from sys import stderr
 from sys import stdout
+from threading import current_thread
 
 try:
 	import sublime
@@ -79,11 +80,16 @@ def print_out(message, color, file):
 			module = getmodule(stack_[2][0]).__name__
 			CACHED_MODULES[stack_[2][0].f_code] = module
 	if not print_fallback:
-		print("[%s] %s:%i → %s%s\033[0m" % (strftime("%H:%M:%S"), module, 
-			stack_[2][0].f_lineno, color, message), file=file)
+		# Constants not used for performance reasons
+		# String is split so that lookup speed is improved
+		print("[\033[94m\033[40mfl0w\033[0m\033[0m]\033[96m "
+			"%s\033[0m:%i → %s%s\033[0m" % (
+			module, stack_[2][0].f_lineno, color, message), 
+		file=file)
 		file.flush()
 	else:
-		print("[%s] %s: %s" % (strftime("%H:%M:%S"), module, message))
+		print("[fl0w] %s:%i → %s" % (module, 
+			stack_[2][0].f_lineno, message))
 
 def info(message, color=""):
 	print_out(message, color, stdout)
