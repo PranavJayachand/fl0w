@@ -60,10 +60,8 @@ class Menu:
 		self.back = back
 		entries = self.menu_entries
 		if back:
-			entries.insert(0, ["Back", "Back to previous menu"])
-		if not self.subtitles:
-			for entry_index in range(len(entries)):
-				del entries[entry_index][1]
+			entries.insert(0, ["Back", 
+				"Back to previous menu"] if self.subtitles else ["Back"])
 		window.show_quick_panel(entries, self._action,
 			flags=0, selected_index=self.selected_index,
 			on_highlight=self.on_highlight)
@@ -74,7 +72,7 @@ class Menu:
 				if entry_id != 0:
 					entry = self.entries[entry_id - 1]
 				else:
-					self.back.invoke(self.window)
+					self.back.invoke(self.window, back=self.back.back)
 					return
 			else:
 				entry = self.entries[entry_id]
@@ -92,7 +90,10 @@ class Menu:
 	def menu_entries(self):
 		entries = []
 		for entry_id in self.entries:
-			entries.append([self.entries[entry_id].name, self.entries[entry_id].description])
+			if self.subtitles:
+				entries.append([self.entries[entry_id].name, self.entries[entry_id].description])
+			else:
+				entries.append([self.entries[entry_id].name])
 		return entries
 
 
@@ -134,3 +135,6 @@ class Menu:
 					del self.entries[entry_id]
 		else:
 			raise TypeError("invalid type supplied")
+
+	def clear(self):
+		self.entries = {}
