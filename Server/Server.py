@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import re
+import pwd
 import platform
 import struct
 from subprocess import Popen, PIPE
@@ -100,6 +101,13 @@ class Subscribe(Route):
 			if "name" in data:
 				handler.name = data["name"]
 			handler.routes["peers"].push_changes(handler)
+
+
+class WhoAmI(Route):
+	def run(self, data, handler):
+		handler.send({"id" : handler.id_, 
+			"user" : pwd.getpwuid(os.getuid()).pw_name}, 
+			handler.reverse_routes[self])
 
 
 class Peers(Route):
@@ -237,6 +245,7 @@ server.set_app(WebSocketWSGIApplication(handler_cls=Handler,
 		handler_args={"debug" : config.debug, "broadcast" : broadcast,
 		"websockets" : server.manager.websockets,
 		"routes" : {"info" : Info(),
+		"whoami" : WhoAmI(),
 		"subscribe" : Subscribe(),
 		"hostname" : DummyPipe(),
 		"processes" : DummyPipe(),
