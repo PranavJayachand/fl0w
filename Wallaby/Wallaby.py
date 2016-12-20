@@ -254,11 +254,28 @@ class Subscribe(Route):
 		handler.send({"name" : Utils.get_hostname(), "channel" : CHANNEL}, "subscribe")
 
 
+class WhoAmI(Route):
+	def run(self, data, handler):
+		Logging.header("ID: '%s' - Running as '%s'" % (data["id"], data["user"]))
+
+	def start(self, handler):
+		handler.send(None, "whoami")
+
+
 class Hostname(Pipe):
 	def run(self, data, peer, handler):
 		if type(data) is dict:
 			if "set" in data:
-				Utils.set_hostname(str(data["set"]))
+				try:
+					Utils.set_hostname(str(data["set"]))
+				except Utils.HostnameNotChangedError:
+					if IS_WALLABY:
+						Logging.error("Hostname change unsuccessful. "
+							"Something is wrong with your Wallaby.")
+					else:
+						Logging.warning("Hostname change unsuccessful. "
+							"This seems to be a dev-system, so don't worry too "
+							"much about it.")
 
 
 class Processes(Pipe):
@@ -299,7 +316,8 @@ try:
 	# setup has to be called before the connection is established
 	ws.setup({"subscribe" : Subscribe(), "hostname" : Hostname(),
 		"processes" : Processes(), "sensor" : Sensor(),
-		"identify" : Identify(), "list_programs" : ListPrograms()},
+		"identify" : Identify(), "list_programs" : ListPrograms(), 
+		"whoami" : WhoAmI()},
 		debug=config.debug)
 	ws.connect()
 	ws.run_forever()
