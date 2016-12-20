@@ -75,7 +75,6 @@ class Fl0wClient(Client):
 			handler.fl0w.controller_menu.clear()
 			for id_ in data:
 				action_menu = Menu()
-				print(id(action_menu))
 				action_menu.id_ = id_
 				action_menu += Entry("Programs", 
 					"Lists all executable programs on the controller.", 
@@ -83,9 +82,9 @@ class Fl0wClient(Client):
 						handler, id_))				
 				action_menu += Entry("Set Name", 
 					"Sets the hostname of the selected controller",
-					action=lambda: Input("New Hostname:", initial_text=data[id_]["name"], 
-					on_done=lambda hostname: handler.pipe({"set" : hostname}, 
-						"hostname", id_)).invoke(handler.fl0w.window))
+					action=partial(lambda handler, id_: Input("New Hostname:", initial_text=data[id_]["name"], 
+						on_done=lambda hostname: handler.pipe(
+							{"set" : hostname}, "hostname", id_)).invoke(handler.fl0w.window), handler, id_))
 				action_menu += Entry("Processes", 
 					"Lists processes currently running on controller.", 
 					action=partial(lambda handler: handler.pipe(None, "processes", id_), 
@@ -94,6 +93,7 @@ class Fl0wClient(Client):
 				handler.fl0w.controller_menu += Entry(data[id_]["name"], id_, sub_menu=action_menu,
 					action=self.set_selected_action_menu,
 					kwargs={"selected_action_menu" : action_menu})
+
 
 
 		def set_selected_action_menu(self, selected_action_menu):
