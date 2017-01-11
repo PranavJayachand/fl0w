@@ -15,6 +15,12 @@ CHANNEL = 2
 IS_WALLABY = Utils.is_wallaby()
 PATH = "/home/root/Documents/KISS/bin/" if IS_WALLABY else (sys.argv[1] if len(sys.argv) > 1 else None)
 
+PATH = os.path.abspath(PATH)
+
+if PATH[-1] != "/":
+	PATH = PATH + "/"
+
+
 LIB_WALLABY = "/usr/lib/libwallaby.so"
 WALLABY_PROGRAMS = "/root/Documents/KISS/bin/"
 
@@ -41,7 +47,7 @@ class SensorReadout:
 			SensorReadout.DIGITAL : []}
 		self.generate_random_values = False
 		# Running on actual hardware?
-		if Utils.is_wallaby():
+		if IS_WALLABY:
 			if not os.path.exists(LIB_WALLABY):
 				Logging.error("The Wallaby library should normally exist on "
 					"a Wallaby. You broke something, mate.")
@@ -115,11 +121,14 @@ class SensorReadout:
 				for port in self.readout_required[mode]:
 					current_values[mode][port] = self.get_sensor_value(port, mode)
 			for peer in self.peers:
+				readouts = 0
 				response = {"analog" : {}, "digital" : {}}
 				for mode in SensorReadout.NAMED_MODES:
 					for port in self.peers[peer][mode]:
 						response[SensorReadout.NAMED_MODES[mode]][port] = current_values[mode][port]
-				self.handler.pipe(response, "sensor", peer)
+						readouts += 1
+				if readouts != 0:
+					self.handler.pipe(response, "sensor", peer)
 			time.sleep(self.poll_rate)
 
 	@staticmethod
@@ -141,18 +150,40 @@ class Identify(Pipe):
 class ListPrograms(Pipe):
 	def run(self, data, peer, handler):
 		programs = []
-		if IS_WALLABY:
-			if os.path.isdir(WALLABY_PROGRAMS):
-				for program in os.listdir(WALLABY_PROGRAMS):
-					if "botball_user_program" in WALLABY_PROGRAMS + program:
-						programs.append(programm)
-			else:
-				Logging.error("Harrogate folder structure does not exist. "
-					"You broke something, mate.")
+		if os.path.isdir(PATH):
+			for program in os.listdir(PATH):
+				if "botball_user_program" in os.listdir(PATH + program):
+					programs.append(program)
 		else:
-			for program in os.listdir("/bin"):
-				programs.append(program)
+			Logging.error("Harrogate folder structure does not exist. "
+				"You broke something, mate.")
 		handler.pipe(programs, handler.reverse_routes[self], peer)
+
+
+class RunProgram(Pipe):
+	def __init__(self, output_unbuffer):
+		self.command = [output_unbuffer, "-i0", "-o0", "-e0"]
+
+
+	def run(self, data, peer, handler):
+		if type(data) is str:
+			if data[-1] != "/":
+				data = data + "/"
+			path = "%s%s/botball_user_program" % (PATH, data)
+			if os.path.isfile(path):
+				program = subprocess.Popen(self.command + [path], 
+					stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+				# Poll process for new output until finished
+				for line in iter(program.stdout.readline, b""):
+					handler.pipe(line.decode(), "std_stream", peer)
+			else:
+				if handler.debug:
+					Logging.warning("Program '%s' not found." % data)
+
+
+class StopProgram(Pipe):
+	def run(self, data, peer, handler):
+		pass
 
 
 class Sensor(Pipe):
@@ -317,7 +348,7 @@ try:
 	ws.setup({"subscribe" : Subscribe(), "hostname" : Hostname(),
 		"processes" : Processes(), "sensor" : Sensor(),
 		"identify" : Identify(), "list_programs" : ListPrograms(), 
-		"whoami" : WhoAmI()},
+		"whoami" : WhoAmI(), "run_program" : RunProgram(config.output_unbuffer)},
 		debug=config.debug)
 	ws.connect()
 	ws.run_forever()
