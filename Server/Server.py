@@ -65,21 +65,6 @@ class Compile:
 
 
 
-class StdStream(Route):
-	def __init__(self):
-		self.stream_to = {}
-
-	def run(self, data, handler):
-		if type(data) is str:
-			if handler in self.stream_to.keys():
-				self.stream_to[handler].send(data, "std_stream")
-		elif type(data) is dict:
-			if handler in self.stream_to.keys():
-				self.stream_to[handler].send(data, "std_stream")
-				del self.stream_to[handler]
-
-
-
 class Subscribe(Route):
 	EDITOR = 1
 	WALLABY = 2
@@ -252,7 +237,10 @@ server.set_app(WebSocketWSGIApplication(handler_cls=Handler,
 		"peers" : Peers(),
 		"sensor" : DummyPipe(),
 		"identify" : DummyPipe(),
-		"list_programs" : DummyPipe()}}))
+		"list_programs" : DummyPipe(),
+		"run_program" : DummyPipe(),
+		"std_stream" : DummyPipe(),
+		"stop_program" : DummyPipe()}}))
 
 
 try:
