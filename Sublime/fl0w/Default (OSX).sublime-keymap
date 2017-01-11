@@ -1,0 +1,10 @@
+[
+	{
+		"keys" : ["f8"],
+		"command" : "run"
+	},
+	{
+		"keys" : ["f9"],
+		"command" : "sensor"		
+	}
+]
