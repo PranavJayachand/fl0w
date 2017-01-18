@@ -46,7 +46,7 @@ windows = []
 sensor_phantoms = []
 
 def set_status(status, window):
-	window.active_view().set_status(FL0W_STATUS, 
+	window.active_view().set_status(FL0W_STATUS,
 				"fl0w: %s" % status)
 
 class Fl0wClient(Client):
@@ -98,22 +98,22 @@ class Fl0wClient(Client):
 			for id_ in data:
 				action_menu = Menu()
 				action_menu.id_ = id_
-				action_menu += Entry("Set Target", 
-					"Set controller as target for program execution and sensor readouts.", 
-					action=partial(lambda handler, id_: self.set_target(handler, id_), 
-						handler, id_)) 				
-				action_menu += Entry("Programs", 
-					"Lists all executable programs on the controller.", 
-					action=partial(lambda handler, id_: handler.pipe(None, "list_programs", id_), 
-						handler, id_))          
-				action_menu += Entry("Set Name", 
+				action_menu += Entry("Set Target",
+					"Set controller as target for program execution and sensor readouts.",
+					action=partial(lambda handler, id_: self.set_target(handler, id_),
+						handler, id_))
+				action_menu += Entry("Programs",
+					"Lists all executable programs on the controller.",
+					action=partial(lambda handler, id_: handler.pipe(None, "list_programs", id_),
+						handler, id_))
+				action_menu += Entry("Set Name",
 					"Sets the hostname of the selected controller",
-					action=partial(lambda handler, id_: Input("New Hostname:", initial_text=data[id_]["name"], 
+					action=partial(lambda handler, id_: Input("New Hostname:", initial_text=data[id_]["name"],
 						on_done=lambda hostname: handler.pipe(
 							{"set" : hostname}, "hostname", id_)).invoke(handler.fl0w.window), handler, id_))
-				action_menu += Entry("Processes", 
-					"Lists processes currently running on controller.", 
-					action=partial(lambda handler: handler.pipe(None, "processes", id_), 
+				action_menu += Entry("Processes",
+					"Lists processes currently running on controller.",
+					action=partial(lambda handler: handler.pipe(None, "processes", id_),
 						handler, id_))
 				action_menu.back = handler.fl0w.controller_menu
 				handler.fl0w.controller_menu += Entry(data[id_]["name"], id_, sub_menu=action_menu,
@@ -144,17 +144,17 @@ class Fl0wClient(Client):
 		def run(self, data, peer, handler):
 			program_menu = Menu(subtitles=False)
 			for program in data:
-				program_menu += Entry(program, 
-					action=lambda handler: handler.pipe(program, 
-						"run_program", 
+				program_menu += Entry(program,
+					action=lambda handler: handler.pipe(program,
+						"run_program",
 						handler.routes["peers"].selected_action_menu.id_),
 					kwargs={"handler" : handler})
-			program_menu.invoke(handler.fl0w.window, 
+			program_menu.invoke(handler.fl0w.window,
 				back=handler.routes["peers"].selected_action_menu)
 
 	class StdStream(Pipe):
 		def run(data, peer, handler):
-
+			pass
 
 class Fl0w:
 	def __init__(self, window, debug=False):
@@ -164,48 +164,48 @@ class Fl0w:
 			self.folder = self.folder + "/"
 
 		self.connected = False
-		
+
 		self.required_readouts = {"analog" : [], "digital" : []}
 		self.sensor_readouts = {"analog" : {}, "digital" : {}}
-		
+
 		self._target = None
 		self._debug = debug
 
 
 		self.start_menu = Menu()
-		self.start_menu += Entry("Connect", "Connect to a fl0w server", 
+		self.start_menu += Entry("Connect", "Connect to a fl0w server",
 			action=self.invoke_connect)
-		self.start_menu += Entry("About", "Information about fl0w", 
+		self.start_menu += Entry("About", "Information about fl0w",
 			action=self.invoke_about)
 
 		self.debug_menu = Menu(subtitles=False)
-		self.debug_menu += Entry("On", 
+		self.debug_menu += Entry("On",
 			action=lambda: self.set_debug(True))
-		self.debug_menu += Entry("Off", 
+		self.debug_menu += Entry("Off",
 			action=lambda: self.set_debug(False))
 
 
 		self.settings = Menu()
-		self.settings += Entry("Debug", "Toggle debug mode", 
+		self.settings += Entry("Debug", "Toggle debug mode",
 			sub_menu=self.debug_menu)
 
 
 		self.meta = Menu()
-		self.meta += Entry("Info", "Server info", 
+		self.meta += Entry("Info", "Server info",
 			action=lambda: self.ws.send(None, "info"))
-		self.meta_entry = Entry("Meta", "Debug information about fl0w", 
+		self.meta_entry = Entry("Meta", "Debug information about fl0w",
 			sub_menu=self.meta)
-		if self.debug:  
+		if self.debug:
 			self.main_menu += self.meta_entry
-		
-		
+
+
 		self.main_menu = Menu()
 		self.controller_menu = Menu()
-		self.main_menu += Entry("Controllers", "All connected controllers", 
+		self.main_menu += Entry("Controllers", "All connected controllers",
 			sub_menu=self.controller_menu)
-		self.main_menu += Entry("Settings", "General purpose settings", 
+		self.main_menu += Entry("Settings", "General purpose settings",
 			sub_menu=self.settings)
-		self.main_menu += Entry("Disconnect", "Disconnect from server", 
+		self.main_menu += Entry("Disconnect", "Disconnect from server",
 			action=self.invoke_disconnect)
 
 		self.new_view_opened()
@@ -311,8 +311,8 @@ class Fl0w:
 		try:
 			self.ws = Fl0wClient('ws://%s' % connect_details)
 			self.ws.setup({"info" : Fl0wClient.Info(), "peers" : Fl0wClient.Peers(),
-				"processes" : Fl0wClient.Processes(), 
-				"list_programs" : Fl0wClient.ListPrograms(), "sensor" : Fl0wClient.Sensor()}, 
+				"processes" : Fl0wClient.Processes(),
+				"list_programs" : Fl0wClient.ListPrograms(), "sensor" : Fl0wClient.Sensor()},
 				self, debug=True)
 			self.ws.connect()
 			sublime.set_timeout_async(self.ws.run_forever, 0)
@@ -389,7 +389,7 @@ class SensorCommand(sublime_plugin.WindowCommand):
 		self.enabled = not self.enabled
 		for sensor_phantom in sensor_phantoms:
 			sensor_phantom.enabled = self.enabled
-		set_status("%s sensor phantoms." % ("Enabled" if self.enabled else "Disabled"), 
+		set_status("%s sensor phantoms." % ("Enabled" if self.enabled else "Disabled"),
 			self.window)
 
 
@@ -398,7 +398,7 @@ class SensorPhantom(sublime_plugin.ViewEventListener):
 	def __init__(self, view):
 		self.view = view
 		self.window = view.window()
-		
+
 		self.fl0w = None
 		self._enabled = False
 
@@ -422,7 +422,7 @@ class SensorPhantom(sublime_plugin.ViewEventListener):
 	@property
 	def enabled(self):
 		return self._enabled
-			
+
 	@enabled.setter
 	def enabled(self, enabled_):
 		self._enabled = enabled_
@@ -438,7 +438,7 @@ class SensorPhantom(sublime_plugin.ViewEventListener):
 				self.fl0w.refresh_subscriptions()
 			for sensor_type in ("analog", "digital"):
 				self.window.active_view().erase_phantoms(sensor_type)
-		
+
 
 
 	def phantom_updater(self):
@@ -489,8 +489,8 @@ class SensorPhantom(sublime_plugin.ViewEventListener):
 				self.view.erase_phantoms(sensor_type)
 				for match in self.matches[sensor_type]:
 					try:
-						self.view.add_phantom(sensor_type, match[1], 
-							STYLE_OPEN + str(self.fl0w.sensor_readouts[sensor_type][str(match[0])]) + STYLE_CLOSE, 
+						self.view.add_phantom(sensor_type, match[1],
+							STYLE_OPEN + str(self.fl0w.sensor_readouts[sensor_type][str(match[0])]) + STYLE_CLOSE,
 							sublime.LAYOUT_INLINE)
 					except KeyError:
 						Logging.warning("Unable to retrieve for %s:%i." % (sensor_type, match[0]))
@@ -513,7 +513,7 @@ class SensorPhantom(sublime_plugin.ViewEventListener):
 					self.handle_subscriptions()
 					self.new_matches = False
 
-	def __del__(self):		
+	def __del__(self):
 		self.enabled = False
 
 
