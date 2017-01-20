@@ -23,7 +23,6 @@ import Logging
 
 import webbrowser
 from time import sleep
-from _thread import start_new_thread
 import os
 
 CHANNEL = 1
@@ -41,12 +40,14 @@ PARENTHESES_REGEX = re.compile("\((.*?)\)")
 STYLE_OPEN = "<body><style>code { color: var(--orangish); }</style><code>"
 STYLE_CLOSE = "</code></body>"
 
+ERROR_OPEN = "<body><style>code { color: var(--redish); }</style><code>"
+ERROR_CLOSE = "</code></body>"
 
 windows = []
 sensor_phantoms = []
 
 def set_status(status, window):
-	window.active_view().set_status(FL0W_STATUS,
+	window.active_view().set_status(FL0W_STATUS, 
 				"fl0w: %s" % status)
 
 class Fl0wClient(Client):
@@ -86,7 +87,8 @@ class Fl0wClient(Client):
 
 	class Sensor(Pipe):
 		def run(self, data, peer, handler):
-			handler.fl0w.sensor_readouts = data
+			for sensor_phantom in handler.fl0w.subscriptions:
+				sensor_phantom.update_sensor_values(data)
 
 
 	class Peers(Route):
@@ -98,22 +100,26 @@ class Fl0wClient(Client):
 			for id_ in data:
 				action_menu = Menu()
 				action_menu.id_ = id_
-				action_menu += Entry("Set Target",
-					"Set controller as target for program execution and sensor readouts.",
-					action=partial(lambda handler, id_: self.set_target(handler, id_),
-						handler, id_))
-				action_menu += Entry("Programs",
-					"Lists all executable programs on the controller.",
-					action=partial(lambda handler, id_: handler.pipe(None, "list_programs", id_),
-						handler, id_))
-				action_menu += Entry("Set Name",
+				action_menu += Entry("Set Target", 
+					"Set controller as target for program execution and sensor readouts.", 
+					action=partial(lambda handler, id_: self.set_target(handler, id_), 
+						handler, id_)) 				
+				action_menu += Entry("Programs", 
+					"Lists all executable programs on the controller.", 
+					action=partial(lambda handler, id_: handler.pipe(None, "list_programs", id_), 
+						handler, id_))          
+				action_menu += Entry("Set Name", 
 					"Sets the hostname of the selected controller",
-					action=partial(lambda handler, id_: Input("New Hostname:", initial_text=data[id_]["name"],
+					action=partial(lambda handler, id_: Input("New Hostname:", initial_text=data[id_]["name"], 
 						on_done=lambda hostname: handler.pipe(
 							{"set" : hostname}, "hostname", id_)).invoke(handler.fl0w.window), handler, id_))
-				action_menu += Entry("Processes",
-					"Lists processes currently running on controller.",
-					action=partial(lambda handler: handler.pipe(None, "processes", id_),
+				action_menu += Entry("Processes", 
+					"Lists processes currently running on controller.", 
+					action=partial(lambda handler, id_: handler.pipe(None, "processes", id_), 
+						handler, id_))
+				action_menu += Entry("Identify", 
+					"Plays an identification sound on the controller.", 
+					action=partial(lambda handler, id_: handler.pipe(None, "identify", id_), 
 						handler, id_))
 				action_menu.back = handler.fl0w.controller_menu
 				handler.fl0w.controller_menu += Entry(data[id_]["name"], id_, sub_menu=action_menu,
@@ -123,7 +129,8 @@ class Fl0wClient(Client):
 
 		def set_target(self, handler, peer):
 			handler.fl0w.target = peer
-			set_status("Target: %s" % peer, handler.fl0w.window)
+			if handler.fl0w.debug:
+				set_status("Target: %s" % peer, handler.fl0w.window)
 
 
 		def set_selected_action_menu(self, selected_action_menu):
@@ -144,17 +151,19 @@ class Fl0wClient(Client):
 		def run(self, data, peer, handler):
 			program_menu = Menu(subtitles=False)
 			for program in data:
-				program_menu += Entry(program,
-					action=lambda handler: handler.pipe(program,
-						"run_program",
+				program_menu += Entry(program, 
+					action=lambda handler: handler.pipe(program, 
+						"run_program", 
 						handler.routes["peers"].selected_action_menu.id_),
 					kwargs={"handler" : handler})
-			program_menu.invoke(handler.fl0w.window,
+			program_menu.invoke(handler.fl0w.window, 
 				back=handler.routes["peers"].selected_action_menu)
 
 	class StdStream(Pipe):
 		def run(data, peer, handler):
 			pass
+
+
 
 class Fl0w:
 	def __init__(self, window, debug=False):
@@ -164,98 +173,57 @@ class Fl0w:
 			self.folder = self.folder + "/"
 
 		self.connected = False
-
-		self.required_readouts = {"analog" : [], "digital" : []}
-		self.sensor_readouts = {"analog" : {}, "digital" : {}}
-
+		
+		self.subscriptions = {}
+		self._combined_subscriptions = {"analog" : [], "digital" : []}
+		
 		self._target = None
 		self._debug = debug
 
 
 		self.start_menu = Menu()
-		self.start_menu += Entry("Connect", "Connect to a fl0w server",
+		self.start_menu += Entry("Connect", "Connect to a fl0w server", 
 			action=self.invoke_connect)
-		self.start_menu += Entry("About", "Information about fl0w",
+		self.start_menu += Entry("About", "Information about fl0w", 
 			action=self.invoke_about)
 
 		self.debug_menu = Menu(subtitles=False)
-		self.debug_menu += Entry("On",
+		self.debug_menu += Entry("On", 
 			action=lambda: self.set_debug(True))
-		self.debug_menu += Entry("Off",
+		self.debug_menu += Entry("Off", 
 			action=lambda: self.set_debug(False))
 
 
 		self.settings = Menu()
-		self.settings += Entry("Debug", "Toggle debug mode",
+		self.settings += Entry("Debug", "Toggle debug mode", 
 			sub_menu=self.debug_menu)
 
 
 		self.meta = Menu()
-		self.meta += Entry("Info", "Server info",
+		self.meta += Entry("Info", "Server info", 
 			action=lambda: self.ws.send(None, "info"))
-		self.meta_entry = Entry("Meta", "Debug information about fl0w",
+		self.meta_entry = Entry("Meta", "Debug information about fl0w", 
 			sub_menu=self.meta)
-		if self.debug:
+		if self.debug:  
 			self.main_menu += self.meta_entry
-
-
+		
+		
 		self.main_menu = Menu()
 		self.controller_menu = Menu()
-		self.main_menu += Entry("Controllers", "All connected controllers",
+		self.main_menu += Entry("Controllers", "All connected controllers", 
 			sub_menu=self.controller_menu)
-		self.main_menu += Entry("Settings", "General purpose settings",
+		self.main_menu += Entry("Settings", "General purpose settings", 
 			sub_menu=self.settings)
-		self.main_menu += Entry("Disconnect", "Disconnect from server",
+		self.main_menu += Entry("Disconnect", "Disconnect from server", 
 			action=self.invoke_disconnect)
 
-		self.new_view_opened()
-
-
-	def new_view_opened(self):
-		for phantom in sensor_phantoms:
-			if phantom.window.id() is self.window.id() and phantom.fl0w != self:
-				phantom.fl0w = self
+		# Patch all sensor phantom that have been created before a fl0w instance
+		# was attached to the window
+		for sensor_phantom in sensor_phantoms:
+			if sensor_phantom.window.id() == self.window.id():
+				sensor_phantom.fl0w = self
 				if self.debug:
-					Logging.info("Patched phantom '%s'" % str(phantom))
-
-
-	def run_program(self, path):
-		if self.connected and self.target != None:
-			relpath = os.path.relpath(path, self.folder)
-			if os.path.isfile(self.folder + relpath):
-				self.ws.pipe(relpath, "run_program", self.target)
-
-
-	def refresh_subscriptions(self):
-		required_readouts = {}
-		subscribe_count = 0
-		subscribe = {}
-		# Iterate over all phantoms
-		for phantom in sensor_phantoms:
-			# One fl0w instance per window
-			if phantom.window.id() is self.window.id() and phantom.fl0w == self:
-				for sensor_type in ("analog", "digital"):
-					required_readouts[sensor_type] = []
-					subscribe[sensor_type] = []
-					for port in phantom.required_readouts[sensor_type]:
-						if port not in required_readouts[sensor_type]:
-							required_readouts[sensor_type].append(port)
-						if port not in self.required_readouts[sensor_type]:
-							subscribe[sensor_type].append(port)
-							subscribe_count += 1
-		unsubscribe_count = 0
-		unsubscribe = {}
-		for sensor_type in ("analog", "digital"):
-			unsubscribe[sensor_type] = []
-			for port in self.required_readouts[sensor_type]:
-				if port not in required_readouts[sensor_type]:
-					unsubscribe[sensor_type].append(port)
-					unsubscribe_count += 1
-		self.required_readouts = required_readouts
-		if unsubscribe_count != 0:
-			self.ws.pipe({"unsubscribe" : unsubscribe}, "sensor", self.target)
-		if subscribe_count != 0:
-			self.ws.pipe({"subscribe" : subscribe}, "sensor", self.target)
+					Logging.info("Patched sensor phantom '%s'" % str(sensor_phatom))
 
 
 	@property
@@ -268,8 +236,9 @@ class Fl0w:
 		if self.target != None:
 			self.ws.pipe("unsubscribe", "sensor", self.target)
 		self._target = target
-		if self.required_readouts != {"analog" : [], "digital" : []}:
-			self.ws.pipe({"subscribe" : self.required_readouts}, "sensor", target)
+		set_status("Set target: %s" % target, self.window)
+		if self.combined_subscriptions != {"analog" : [], "digital" : []}:
+			self.ws.pipe({"subscribe" : self.combined_subscriptions_}, "sensor", target)
 
 
 	@property
@@ -293,6 +262,53 @@ class Fl0w:
 		set_status("Debug set to %s" % self._debug, self.window)
 
 
+	@property
+	def combined_subscriptions(self):
+		return self._combined_subscriptions
+
+
+	@combined_subscriptions.setter
+	def combined_subscriptions(self, combined_subscriptions_):
+		if self.combined_subscriptions != combined_subscriptions_:
+			self._combined_subscriptions = combined_subscriptions_
+			if self.connected and self.target != None:
+				self.ws.pipe("unsubscribe", "sensor", self.target)
+				self.ws.pipe({"subscribe" : combined_subscriptions_}, "sensor",
+					self.target)
+
+
+	def subscribe(self, sensor_phatom, subscriptions):
+		self.subscriptions[sensor_phatom] = subscriptions
+		self.make_subscriptions()
+
+
+
+	def unsubscribe(self, sensor_phantom):
+		if sensor_phantom in self.subscriptions:
+			del self.subscriptions[sensor_phantom]
+		self.make_subscriptions()
+
+
+	def make_subscriptions(self):
+		combined_subscriptions = {"analog" : [], "digital" : []}
+		for sensor_phantom in self.subscriptions:
+			for sensor_type in ("analog", "digital"):
+				combined_subscriptions[sensor_type] = list(
+						set(combined_subscriptions[sensor_type]) | 
+						set(self.subscriptions[sensor_phantom][sensor_type])
+					)
+		self.combined_subscriptions = combined_subscriptions
+
+
+	def run_program(self, path):
+		if self.connected and self.target != None:
+			relpath = os.path.relpath(path, self.folder)
+			if os.path.isfile(self.folder + relpath):
+				if self.debug:
+					Logging.info("Running program '%s'" % relpath)
+				self.ws.pipe(relpath, "run_program", self.target)
+
+
 	def invoke_start_menu(self):
 		self.start_menu.invoke(self.window)
 
@@ -311,8 +327,8 @@ class Fl0w:
 		try:
 			self.ws = Fl0wClient('ws://%s' % connect_details)
 			self.ws.setup({"info" : Fl0wClient.Info(), "peers" : Fl0wClient.Peers(),
-				"processes" : Fl0wClient.Processes(),
-				"list_programs" : Fl0wClient.ListPrograms(), "sensor" : Fl0wClient.Sensor()},
+				"processes" : Fl0wClient.Processes(), 
+				"list_programs" : Fl0wClient.ListPrograms(), "sensor" : Fl0wClient.Sensor()}, 
 				self, debug=True)
 			self.ws.connect()
 			sublime.set_timeout_async(self.ws.run_forever, 0)
@@ -330,6 +346,9 @@ class Fl0w:
 
 	def invoke_disconnect(self):
 		if self.connected:
+			for sensor_phantom in sensor_phantoms:
+				if sensor_phantom.window.id() == self.window.id():
+					sensor_phantom.enabled = False
 			self.ws.close()
 			set_status("Connection closed '%s'" % self.folder, self.window)
 			self.connected = False
@@ -375,9 +394,18 @@ class Fl0wCommand(sublime_plugin.WindowCommand):
 class RunCommand(sublime_plugin.WindowCommand):
 	def run(self):
 		if hasattr(self.window, "fl0w"):
-			file_name = self.window.active_view().file_name()
-			if file_name != None and file_name.endswith(".c"):
-				self.window.fl0w.run_program(file_name)
+			if self.window.fl0w.connected:
+				if self.window.fl0w.target == None:
+					sublime.error_message("A target controller has to be set to "
+						"run programs.")
+				else:
+					file_name = self.window.active_view().file_name()
+					if file_name != None and file_name.endswith(".c"):
+						self.window.fl0w.run_program(file_name)
+			else:
+				sublime.error_message("fl0w is not connected.")
+		else:
+			sublime.error_message("fl0w is not running in your current window.")
 
 
 class SensorCommand(sublime_plugin.WindowCommand):
@@ -385,67 +413,89 @@ class SensorCommand(sublime_plugin.WindowCommand):
 		super().__init__(window)
 		self.enabled = False
 
-	def run(self):
-		self.enabled = not self.enabled
-		for sensor_phantom in sensor_phantoms:
-			sensor_phantom.enabled = self.enabled
-		set_status("%s sensor phantoms." % ("Enabled" if self.enabled else "Disabled"),
-			self.window)
 
+	def run(self):
+		if not self.enabled:
+			if hasattr(self.window, "fl0w"):
+				if self.window.fl0w.connected:
+					if self.window.fl0w.target == None:
+						sublime.error_message("A target controller has to be set to "
+							"enable inline sensor readouts.")
+					else:
+						self.enabled = not self.enabled
+						for sensor_phantom in sensor_phantoms:
+							if sensor_phantom.window.id() == self.window.id():
+								sensor_phantom.enabled = self.enabled
+						set_status("Enabled sensor phantoms.", self.window)
+				else:
+					sublime.error_message("fl0w is not connected.")
+			else:
+				sublime.error_message("fl0w is not running in your current window.")
+		else:
+			self.enabled = not self.enabled
+			for sensor_phantom in sensor_phantoms:
+				if sensor_phantom.window.id() == self.window.id():
+					sensor_phantom.enabled = self.enabled
+			set_status("Disabled sensor phantoms.", self.window)
 
 
 class SensorPhantom(sublime_plugin.ViewEventListener):
 	def __init__(self, view):
 		self.view = view
 		self.window = view.window()
-
+		
+		# Is patched by the fl0w instance that is in control of the same window
 		self.fl0w = None
 		self._enabled = False
 
-		self.matches = {"analog" : [], "digital" : []}
-		self.new_matches = False
-
-		self.required_readouts = {"analog" : [], "digital" : []}
+		self._matches = {"analog" : [], "digital" : []}
 
 		self.timeout_scheduled = False
 		self.needs_update = False
 
 		for window in windows:
 			if hasattr(window, "fl0w"):
-				window.fl0w.new_view_opened()
+				self.fl0w = window.fl0w
 		if not self in sensor_phantoms:
 			sensor_phantoms.append(self)
-
-		self.find_matches()
 
 
 	@property
 	def enabled(self):
 		return self._enabled
 
+			
 	@enabled.setter
 	def enabled(self, enabled_):
 		self._enabled = enabled_
 		if enabled_:
 			if self.fl0w != None:
-				self.handle_subscriptions()
-				# Proper way doesn't seem to work after reloading
-				# sublime.set_timeout_async(self.phantom_updater, 0)
-				start_new_thread(self.phantom_updater, ())
+				self.find_matches()
+				self.fl0w.subscribe(self, self.subscriptions)
 		else:
-			self.required_readouts = {"analog" : [], "digital" : []}
 			if self.fl0w != None:
-				self.fl0w.refresh_subscriptions()
+				self.fl0w.unsubscribe(self)
 			for sensor_type in ("analog", "digital"):
 				self.window.active_view().erase_phantoms(sensor_type)
 
 
+	@property
+	def matches(self):
+		return self._matches
 
-	def phantom_updater(self):
-		while self.enabled:
-			if self.fl0w.connected and self.fl0w.target != None:
-				self.update_sensor_values()
-			sleep(0.2)
+	@matches.setter
+	def matches(self, matches_):
+		if not matches_ == self.matches:
+			self._matches = matches_
+			self.fl0w.subscribe(self, self.subscriptions)
+
+
+	@property
+	def subscriptions(self):
+		subscriptions_ = {"analog" : [], "digital" : []}
+		for sensor_type in ("analog", "digital"):
+			subscriptions_[sensor_type] = [sensor[0] for sensor in self.matches[sensor_type]]
+		return subscriptions_
 
 
 	def find_matches(self):
@@ -460,40 +510,25 @@ class SensorPhantom(sublime_plugin.ViewEventListener):
 					if len(port_candidates) == 1:
 						if port_candidates[0].isnumeric():
 							matches[method_name].append(
-								(int(port_candidates[0]), sublime.Region(self.view.line(candidate.a).b)))
-			if matches != self.matches:
-				self.matches = matches
-				self.new_matches = True
+								(
+									int(port_candidates[0]), 
+									sublime.Region(self.view.line(candidate.a).b)
+								))
+		self.matches = matches
 
-
-	def handle_subscriptions(self):
-		ports = {}
+	# Called by fl0w instance
+	def update_sensor_values(self, readouts):
 		for sensor_type in ("analog", "digital"):
-			# If new matches are found subscribe to them
+			self.view.erase_phantoms(sensor_type)
 			for match in self.matches[sensor_type]:
-				if match[0] not in self.required_readouts[sensor_type]:
-					self.required_readouts[sensor_type].append(match[0])
-			# If a subscription is not needed anymore
-			# Fetch all required ports
-			ports[sensor_type] = [match[0] for match in self.matches[sensor_type]]
-			for required_readout in self.required_readouts[sensor_type]:
-				if required_readout not in ports[sensor_type]:
-					del self.required_readouts[sensor_type][self.required_readouts[sensor_type].index(required_readout)]
-			if self.fl0w.target != None:
-				self.fl0w.refresh_subscriptions()
-
-
-	def update_sensor_values(self):
-		if self.fl0w.target != None:
-			for sensor_type in ("analog", "digital"):
-				self.view.erase_phantoms(sensor_type)
-				for match in self.matches[sensor_type]:
-					try:
-						self.view.add_phantom(sensor_type, match[1],
-							STYLE_OPEN + str(self.fl0w.sensor_readouts[sensor_type][str(match[0])]) + STYLE_CLOSE,
-							sublime.LAYOUT_INLINE)
-					except KeyError:
-						Logging.warning("Unable to retrieve for %s:%i." % (sensor_type, match[0]))
+				try:
+					self.view.add_phantom(sensor_type, match[1], 
+						STYLE_OPEN + str(readouts[sensor_type][str(match[0])]) + STYLE_CLOSE, 
+						sublime.LAYOUT_INLINE)
+				except KeyError:
+					self.view.add_phantom(sensor_type, match[1], 
+						ERROR_OPEN + "!" + ERROR_CLOSE, 
+						sublime.LAYOUT_INLINE)
 
 
 	def handle_timeout(self):
@@ -502,20 +537,17 @@ class SensorPhantom(sublime_plugin.ViewEventListener):
 			self.needs_update = False
 			self.find_matches()
 
+
 	def on_modified(self):
-		if self.enabled and self.fl0w != None:
+		if self.enabled:
 			if self.timeout_scheduled:
 				self.needs_update = True
 			else:
 				sublime.set_timeout(lambda: self.handle_timeout(), 500)
 				self.find_matches()
-				if self.new_matches:
-					self.handle_subscriptions()
-					self.new_matches = False
 
-	def __del__(self):
+
+	def __del__(self):		
 		self.enabled = False
-
-
-
-
+		if self in sensor_phantoms:
+			del sensor_phantoms[sensor_phantoms.index(self)]
