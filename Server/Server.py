@@ -240,7 +240,9 @@ server.set_app(WebSocketWSGIApplication(handler_cls=Handler,
 		"list_programs" : DummyPipe(),
 		"run_program" : DummyPipe(),
 		"std_stream" : DummyPipe(),
-		"stop_program" : DummyPipe()}}))
+		"stop_programs" : DummyPipe(),
+		"shutdown" : DummyPipe(),
+		"reboot" : DummyPipe()}}))
 
 
 try:
