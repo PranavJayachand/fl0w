@@ -5,6 +5,10 @@
 	},
 	{
 		"keys" : ["f9"],
+		"command" : "stop"
+	},
+	{
+		"keys" : ["f10"],
 		"command" : "sensor"		
 	}
 ]
