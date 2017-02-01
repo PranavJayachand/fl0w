@@ -40,7 +40,7 @@ class SensorReadout:
 	MODES = tuple(NAMED_MODES.keys())
 
 
-	def __init__(self, handler, poll_rate=0.2):
+	def __init__(self, handler, poll_rate=0.5):
 		self.poll_rate = poll_rate
 		self.handler = handler
 		self.peer_lock = threading.Lock()
@@ -173,14 +173,19 @@ class ListPrograms(Pipe):
 
 
 class StopPrograms(Pipe):
+	NO_PROGRAMS_RUNNING = 1
+
 	def run(self, data, peer, handler):
 		if handler.debug:
 			Logging.info("Stopping all botball programs.")
-		output = subprocess.call(["killall", "botball_user_program"], 
-			stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+		if subprocess.call(["killall", "botball_user_program"], 
+			stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT):
+			handler.pipe(self.__class__.NO_PROGRAMS_RUNNING, "stop_programs", peer)
 
 
 class RunProgram(Pipe):
+	PROGRAM_NOT_FOUND = 1
+
 	def __init__(self, output_unbuffer):
 		self.command = [output_unbuffer, "-i0", "-o0", "-e0"]
 
@@ -195,6 +200,7 @@ class RunProgram(Pipe):
 					stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 				start_new_thread(self.stream_stdout, (program, peer, handler))
 			else:
+				handler.pipe(self.__class__.PROGRAM_NOT_FOUND, "run_program", peer)
 				if handler.debug:
 					Logging.warning("Program '%s' not found." % data[:-1])
 
