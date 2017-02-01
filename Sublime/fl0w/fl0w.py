@@ -69,7 +69,7 @@ class Fl0wClient(Client):
 		if self.fl0w.debug:
 			Logging.info("Connection ready!")
 		# Enlist on editor channel
-		self.send({"channel" : 1, "name" : get_hostname()}, "subscribe")
+		self.send({"channel" : CHANNEL, "name" : get_hostname()}, "subscribe")
 		# Subscribe to controller channel
 		self.send({"subscribe" : [2]}, "peers")
 
@@ -124,12 +124,10 @@ class Fl0wClient(Client):
 						handler, id_, data[id_]["name"]))				
 				action_menu += Entry("Run program", 
 					"Run a botball program on the controller", 
-					action=partial(lambda handler, id_: handler.pipe(None, "list_programs", id_), 
-						handler, id_))
+					action=partial(handler.pipe, None, "list_programs", id_))
 				action_menu += Entry("Stop programs", 
 					"Stop all currently running botball programs", 
-					action=partial(lambda handler, id_: handler.pipe(None, "stop_programs", id_), 
-						handler, id_))          
+					action=partial(handler.pipe, None, "stop_programs", id_))          
 				utilities_menu += Entry("Set Name", 
 					"Sets the hostname of the selected controller",
 					action=partial(lambda handler, id_: Input("New Hostname:", 
@@ -139,22 +137,18 @@ class Fl0wClient(Client):
 							"hostname", id_)).invoke(handler.fl0w.window), handler, id_))
 				utilities_menu += Entry("Processes", 
 					"Lists processes currently running on controller", 
-					action=partial(lambda handler, id_: handler.pipe(None, "processes", id_), 
-						handler, id_))
+					action=partial(handler.pipe, None, "processes", id_))
 				utilities_menu += Entry("Identify", 
 					"Plays an identification sound on the controller.", 
-					action=partial(lambda handler, id_: handler.pipe(None, "identify", id_), 
-						handler, id_))
+					action=partial(handler.pipe, None, "identify", id_))
 				action_menu += Entry("Utilities", "Stuff you might need but probably won't", 
 					sub_menu=utilities_menu)
 				power_menu += Entry("Shutdown", 
 					"Shutdown the controller", 
-					action=partial(lambda handler, id_: handler.pipe(None, "shutdown", id_), 
-						handler, id_))
+					action=partial(handler.pipe, None, "shutdown", id_))
 				power_menu += Entry("Reboot", 
 					"Reboot the controller", 
-					action=partial(lambda handler, id_: handler.pipe(None, "reboot", id_), 
-						handler, id_))
+					action=partial(handler.pipe, None, "reboot", id_))
 				action_menu += Entry("Power", "Power related actions", sub_menu=power_menu)	
 				action_menu.back = handler.fl0w.controller_menu
 				handler.fl0w.controller_menu += Entry(data[id_]["name"], id_, sub_menu=action_menu,
@@ -197,11 +191,27 @@ class Fl0wClient(Client):
 			handler.pipe(program, "run_program", id_)
 
 
+	class RunProgram(Pipe):
+		PROGRAM_NOT_FOUND = 1
+
+		def run(self, data, peer, handler):
+			if data == self.__class__.PROGRAM_NOT_FOUND:
+				sublime.error_message("Program not found.")
+
+
+	class StopPrograms(Pipe):
+		NO_PROGRAMS_RUNNING = 1
+
+		def run(self, data, peer, handler):
+			if data == self.__class__.NO_PROGRAMS_RUNNING:
+				sublime.error_message("No programs running.")		
+
+
 	class StdStream(Pipe):
 		def start(self, handler):
 			self.output_panels = {}
 
-			self.lock = threading.Lock()
+			self.lock = threading.RLock()
 			self.buffer = {}
 
 			self.handler = None
@@ -235,17 +245,25 @@ class Fl0wClient(Client):
 					self.output_panels[peer] = self.create_output_panel(handler.fl0w.window, peer)
 					self.buffer[peer].append(data)
 				self.lock.release()
-			"""
+			# Meta info comes in so infrequently that the conditional logic would
+			# slow down the regular output streaming
 			elif type(data) is dict:
-				# Bad solution, should instead be treated seperately
-				# while still being timed correctly.
 				meta_text = ""
 				if "exit_code" in data:
-					meta_text += "Program finished with exit code: %d\n" % data["exit_code"]
+					meta_text += "Program finished with exit code: %d\n" % data["exit_code"]				
 				self.lock.acquire()
-				self.buffer.append(meta_text)
-				self.lock.release()
-			"""
+				# try/except is faster than an explicit if as long as the 
+				# condition is not met
+				# function call is also slower
+				try:
+					self.buffer[peer].append(meta_text)
+				except KeyError:
+					self.buffer[peer] = []
+					self.create_output_panel(handler.fl0w.window, peer)
+					self.output_panels[peer] = self.create_output_panel(handler.fl0w.window, peer)
+					self.buffer[peer].append(meta_text)
+				self.lock.release()				
+
 
 
 		def write_to_panel(self, text, peer):
@@ -283,6 +301,7 @@ class Fl0wClient(Client):
 
 class Fl0w:
 	def __init__(self, window, debug=False):
+		self.settings = sublime.load_settings("fl0w.sublime-settings")
 		self.window = window
 		self.folder = window.folders()[0]
 		if self.folder != "/":
@@ -300,7 +319,9 @@ class Fl0w:
 
 		self.start_menu = Menu()
 		self.start_menu += Entry("Connect", "Connect to a fl0w server", 
-			action=self.invoke_connect)
+			action=partial(Input("Address:Port (auto-connect nyi)", 
+				initial_text=self.settings.get("address", "127.0.0.1:3077"), 
+				on_done=self.invoke_connect).invoke, self.window))
 		self.start_menu += Entry("About", "Information about fl0w", 
 			action=self.invoke_about)
 
@@ -385,6 +406,9 @@ class Fl0w:
 	# Could be simplified because only one view can be active at any time.
 	# This would definetly lead to some major performace improvements on
 	# view switching and less unnecessary unsubscribes.
+	
+	# On the other hand it might be a good idea to leave it in and provide
+	# an option to disable aggressive unsubscribes
 	@property
 	def combined_subscriptions(self):
 		return self._combined_subscriptions
@@ -411,9 +435,18 @@ class Fl0w:
 
 	def unsubscribe(self, sensor_phantom):
 		if sensor_phantom in self.subscriptions:
-			self.subscriptions_lock.acquire()			
+			"""
+			print("Lock will be aquired.")
+			self.subscriptions_lock.acquire()
+			print("Lock was aquired.")		
 			del self.subscriptions[sensor_phantom]
+			print("Lock will be released.")
 			self.subscriptions_lock.release()
+			print("Lock was released.")
+			"""
+			# Temporary solution, locking caused sublime to freeze
+			# Could cause problems if lots (> 100) views are open.
+			self.subscriptions[sensor_phantom] = {"analog" : [], "digital" : []}
 		self.make_subscriptions()
 
 
@@ -456,26 +489,28 @@ class Fl0w:
 
 
 
-	def connect(self, connect_details):
+	def connect(self, address):
 		try:
-			self.ws = Fl0wClient('ws://%s' % connect_details)
+			self.ws = Fl0wClient(address)
 			self.ws.setup({"info" : Fl0wClient.Info(), "peers" : Fl0wClient.Peers(),
 				"processes" : Fl0wClient.Processes(), 
 				"list_programs" : Fl0wClient.ListPrograms(), "sensor" : Fl0wClient.Sensor(),
-				"std_stream" : Fl0wClient.StdStream()}, 
+				"std_stream" : Fl0wClient.StdStream(), "run_program" : Fl0wClient.RunProgram(),
+				"stop_programs" : Fl0wClient.StopPrograms()}, 
 				self, debug=True)
 			self.ws.connect()
 			sublime.set_timeout_async(self.ws.run_forever, 0)
 			set_status("Connection opened '%s'" % self.folder, self.window)
 			self.connected = True
+			self.settings.set("address", address)
 		except OSError as e:
 			sublime.error_message("Error during connection creation:\n %s" % str(e))
 
 
 
-	def invoke_connect(self):
+	def invoke_connect(self, address):
 		# Will be removed once autoconnect works
-		self.connect("127.0.0.1:3077")
+		self.connect("ws://%s" % address)
 
 
 	def invoke_disconnect(self):
